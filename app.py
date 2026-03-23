@@ -99,6 +99,22 @@ def generate_frames():
     global prev_gray, last_motion_time, is_sleeping
 
     while True:
+        # ── If paused, show static screen without touching the camera ──
+        if not recognition_active:
+            paused_frame = np.zeros((480, 640, 3), dtype=np.uint8)
+            cv2.putText(paused_frame, "Recognition Paused",
+                        (160, 230),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.9, (80, 80, 120), 2, cv2.LINE_AA)
+            cv2.putText(paused_frame, "Camera is off",
+                        (230, 265),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (60, 60, 90), 1, cv2.LINE_AA)
+            latest_results = []
+            _, buf = cv2.imencode('.jpg', paused_frame, [cv2.IMWRITE_JPEG_QUALITY, 50])
+            yield (b'--frame\r\n'
+                   b'Content-Type: image/jpeg\r\n\r\n' + buf.tobytes() + b'\r\n')
+            time.sleep(1.0)
+            continue
+
         with camera_lock:
             ok, frame = read_frame()
         if not ok:
@@ -251,7 +267,10 @@ def register_page():
 
 @app.route('/api/register', methods=['POST'])
 def api_register():
-    """Register a new person. Runs dlib in a subprocess to prevent server crashes."""
+    """Register a new person. Pauses recognition during processing."""
+    global recognition_active
+    was_active = recognition_active
+
     try:
         data = request.get_json(force=True)
         name = data.get('name', '').strip()
@@ -261,6 +280,10 @@ def api_register():
             return jsonify({"error": "Name is required"}), 400
         if not images_b64:
             return jsonify({"error": "No images provided"}), 400
+
+        # Pause recognition during registration
+        recognition_active = False
+        print(f"[Register] Pausing recognition for '{name}' registration...")
 
         # Save images to a temp directory
         temp_dir = tempfile.mkdtemp(prefix="face_reg_")
@@ -281,12 +304,12 @@ def api_register():
                 saved += 1
 
         if saved == 0:
+            recognition_active = was_active
             return jsonify({"error": "Could not decode images"}), 400
 
         print(f"[Register] Spawning worker for '{name}' with {saved} images...")
 
         # Run registration in a SEPARATE PROCESS
-        # This way, if dlib segfaults, only the worker dies, not the server
         worker_path = os.path.join(os.path.dirname(__file__), "register_worker.py")
         result = subprocess.run(
             [sys.executable, worker_path, name, temp_dir],
@@ -300,6 +323,7 @@ def api_register():
         if result.returncode != 0:
             print(f"[Register] Worker crashed (exit {result.returncode})")
             print(f"[Register] stderr: {result.stderr}")
+            recognition_active = was_active
             return jsonify({"error": "Face processing failed (dlib crash). "
                                      "Try with fewer photos (3-5) and ensure only your face is visible."}), 500
 
@@ -309,21 +333,27 @@ def api_register():
         except (json.JSONDecodeError, ValueError):
             print(f"[Register] Worker output: {result.stdout}")
             print(f"[Register] Worker stderr: {result.stderr}")
+            recognition_active = was_active
             return jsonify({"error": "Registration process returned invalid output."}), 500
 
         count = output.get("count", 0)
         if count > 0:
-            # Reload encodings in the main process
             engine.load_encodings()
             db.register_person(name, count)
+            recognition_active = was_active
+            print(f"[Register] Done. Resuming recognition.")
             return jsonify({"success": True,
                             "message": f"Registered '{name}' with {count} photo(s)."})
+
+        recognition_active = was_active
         return jsonify({"error": "No face detected in the provided images. "
                                  "Make sure only one face is clearly visible."}), 400
 
     except subprocess.TimeoutExpired:
+        recognition_active = was_active
         return jsonify({"error": "Registration timed out. Try with fewer photos."}), 500
     except Exception as e:
+        recognition_active = was_active
         traceback.print_exc()
         return jsonify({"error": f"Registration failed: {str(e)}"}), 500
 

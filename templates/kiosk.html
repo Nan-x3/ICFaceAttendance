@@ -136,11 +136,11 @@
             border-radius: 10px;
             background: rgba(255, 255, 255, 0.04);
             border: 1px solid rgba(255, 255, 255, 0.06);
-            animation: slideIn 0.3s ease;
         }
         .event-card.fresh {
             border-color: rgba(108, 99, 255, 0.4);
             box-shadow: 0 0 15px rgba(108, 99, 255, 0.15);
+            animation: slideIn 0.3s ease;
         }
         @keyframes slideIn {
             from { opacity: 0; transform: translateX(20px); }
@@ -243,7 +243,7 @@
         setInterval(updateClock, 1000);
 
         // Auto-refresh events and stats
-        let lastEventCount = 0;
+        let lastEventHash = '';
         setInterval(async () => {
             try {
                 const [eventsRes, statsRes, statusRes] = await Promise.all([
@@ -271,16 +271,21 @@
                     text.textContent = 'Active';
                 }
 
-                // Update events list
-                if (events.length > 0) {
-                    const isNew = events.length !== lastEventCount;
-                    lastEventCount = events.length;
+                // Only re-render events if data changed
+                const newHash = JSON.stringify(events);
+                if (newHash === lastEventHash) return;
 
+                const hadEvents = lastEventHash !== '';
+                const oldCount = lastEventHash ? JSON.parse(lastEventHash).length : 0;
+                lastEventHash = newHash;
+
+                if (events.length > 0) {
                     const html = events.slice().reverse().map((e, i) => {
                         const initial = e.name.charAt(0).toUpperCase();
                         const dirClass = e.direction.toLowerCase();
-                        const dirLabel = e.direction === 'IN' ? '→ IN' : '← OUT';
-                        const freshClass = i === 0 && isNew ? 'fresh' : '';
+                        const dirLabel = e.direction === 'IN' ? '\u2192 IN' : '\u2190 OUT';
+                        // Only animate the newest card when a new event arrives
+                        const freshClass = (i === 0 && hadEvents && events.length > oldCount) ? 'fresh' : '';
                         return `
                             <div class="event-card ${freshClass}">
                                 <div class="event-avatar ${dirClass}">${initial}</div>

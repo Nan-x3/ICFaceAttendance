@@ -125,6 +125,9 @@
 
 {% block scripts %}
 <script>
+    let lastAttHash = '';
+    let lastEvtHash = '';
+
     // Auto-refresh every 5 seconds
     setInterval(async () => {
         try {
@@ -137,34 +140,44 @@
             const stats = await statsRes.json();
             const events = await eventsRes.json();
 
+            // Stats always update (lightweight)
             document.getElementById('statPresent').textContent = stats.today_present;
             document.getElementById('statIn').textContent = stats.today_in;
             document.getElementById('statOut').textContent = stats.today_out;
             document.getElementById('statRegistered').textContent = stats.total_registered;
 
-            // Update events ticker
-            if (events.length > 0) {
-                const ticker = document.getElementById('eventsTicker');
-                ticker.innerHTML = events.slice(-5).reverse().map(e =>
-                    `<div class="event-item ${e.direction.toLowerCase()}">
-                        <span class="event-dir">${e.direction === 'IN' ? '→ IN' : '← OUT'}</span>
-                        <span class="event-name">${e.name}</span>
-                        <span class="event-time">${e.time}</span>
-                    </div>`
-                ).join('');
+            // Events ticker — only update if changed
+            const evtHash = JSON.stringify(events);
+            if (evtHash !== lastEvtHash) {
+                lastEvtHash = evtHash;
+                if (events.length > 0) {
+                    const ticker = document.getElementById('eventsTicker');
+                    ticker.innerHTML = events.slice(-5).reverse().map(e =>
+                        `<div class="event-item ${e.direction.toLowerCase()}">
+                            <span class="event-dir">${e.direction === 'IN' ? '\u2192 IN' : '\u2190 OUT'}</span>
+                            <span class="event-name">${e.name}</span>
+                            <span class="event-time">${e.time}</span>
+                        </div>`
+                    ).join('');
+                }
             }
 
-            if (attendance.length > 0) {
-                let html = `<table><thead><tr><th>#</th><th>Name</th><th>Direction</th><th>Time</th><th>Confidence</th></tr></thead><tbody>`;
-                attendance.forEach((r, i) => {
-                    const conf = r.confidence ? Math.round(r.confidence * 100) + '%' : 'N/A';
-                    const initial = r.name.charAt(0).toUpperCase();
-                    const dir = r.direction || 'IN';
-                    const dirLabel = dir === 'IN' ? '→ IN' : '← OUT';
-                    html += `<tr class="fade-in"><td class="row-num">${i+1}</td><td class="name-cell"><div class="avatar">${initial}</div>${r.name}</td><td><span class="direction-badge ${dir.toLowerCase()}">${dirLabel}</span></td><td>${r.time_in}</td><td><span class="confidence-badge">${conf}</span></td></tr>`;
-                });
-                html += '</tbody></table>';
-                document.getElementById('attendanceTable').innerHTML = html;
+            // Attendance table — only update if changed
+            const attHash = JSON.stringify(attendance);
+            if (attHash !== lastAttHash) {
+                lastAttHash = attHash;
+                if (attendance.length > 0) {
+                    let html = `<table><thead><tr><th>#</th><th>Name</th><th>Direction</th><th>Time</th><th>Confidence</th></tr></thead><tbody>`;
+                    attendance.forEach((r, i) => {
+                        const conf = r.confidence ? Math.round(r.confidence * 100) + '%' : 'N/A';
+                        const initial = r.name.charAt(0).toUpperCase();
+                        const dir = r.direction || 'IN';
+                        const dirLabel = dir === 'IN' ? '\u2192 IN' : '\u2190 OUT';
+                        html += `<tr><td class="row-num">${i+1}</td><td class="name-cell"><div class="avatar">${initial}</div>${r.name}</td><td><span class="direction-badge ${dir.toLowerCase()}">${dirLabel}</span></td><td>${r.time_in}</td><td><span class="confidence-badge">${conf}</span></td></tr>`;
+                    });
+                    html += '</tbody></table>';
+                    document.getElementById('attendanceTable').innerHTML = html;
+                }
             }
         } catch(e) { /* ignore */ }
     }, 5000);
