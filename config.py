@@ -54,3 +54,11 @@ SECRET_KEY = "face-attendance-secret-change-this-on-pi"
 # ---------------------
 MIN_REGISTRATION_PHOTOS = 3
 MAX_REGISTRATION_PHOTOS = 20
+
+# ---------------------
+# Motion Detection (Sleep/Wake)
+# ---------------------
+# Seconds of no motion before entering sleep mode (stops recognition)
+SLEEP_AFTER_SECONDS = 30
+# Motion sensitivity — lower = more sensitive. Range: 500–5000
+MOTION_THRESHOLD = 2000

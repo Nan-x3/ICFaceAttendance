@@ -12,6 +12,7 @@ import threading
 import traceback
 import tempfile
 import subprocess
+import logging
 import numpy as np
 from datetime import datetime
 from io import BytesIO
@@ -21,7 +22,8 @@ from flask import (
 )
 from config import (
     FLASK_HOST, FLASK_PORT, SECRET_KEY, CAMERA_SOURCE,
-    CAMERA_RESOLUTION, FRAME_RATE, FRAME_SKIP, SCAN_COOLDOWN_SECONDS
+    CAMERA_RESOLUTION, FRAME_RATE, FRAME_SKIP, SCAN_COOLDOWN_SECONDS,
+    SLEEP_AFTER_SECONDS, MOTION_THRESHOLD
 )
 from recognition_engine import FaceRecognitionEngine
 from attendance import AttendanceDB
@@ -29,6 +31,17 @@ from attendance import AttendanceDB
 # ── Flask App ────────────────────────────────────────────────────────────────
 app = Flask(__name__)
 app.secret_key = SECRET_KEY
+
+# ── File Logger ──────────────────────────────────────────────────────────────
+log_dir = os.path.join(os.path.dirname(__file__), 'data')
+os.makedirs(log_dir, exist_ok=True)
+log_file = os.path.join(log_dir, 'attendance.log')
+
+file_logger = logging.getLogger('attendance')
+file_logger.setLevel(logging.INFO)
+fh = logging.FileHandler(log_file, encoding='utf-8')
+fh.setFormatter(logging.Formatter('%(asctime)s | %(message)s', datefmt='%Y-%m-%d %H:%M:%S'))
+file_logger.addHandler(fh)
 
 # ── Shared State ─────────────────────────────────────────────────────────────
 db = AttendanceDB()
@@ -40,7 +53,12 @@ latest_results = []          # Most recent recognition results
 recognition_active = True    # Pause/resume toggle
 frame_counter = 0
 recent_events = []           # Recent IN/OUT events for on-screen display
-event_display = {}           # name -> {"direction": str, "expire": float} for on-screen flash
+event_display = {}           # name -> {"direction": str, "expire": float}
+
+# Motion detection state
+prev_gray = None
+last_motion_time = time.time()
+is_sleeping = False
 
 
 # ── Camera Helpers ───────────────────────────────────────────────────────────
@@ -76,8 +94,9 @@ def read_frame():
 
 # ── MJPEG Stream Generator ──────────────────────────────────────────────────
 def generate_frames():
-    """Yield JPEG frames with bounding boxes and event overlays."""
+    """Yield JPEG frames with motion detection, recognition, and overlays."""
     global latest_results, frame_counter, recent_events, event_display
+    global prev_gray, last_motion_time, is_sleeping
 
     while True:
         with camera_lock:
@@ -90,7 +109,56 @@ def generate_frames():
         frame_counter += 1
         now = time.time()
 
-        # ── Recognition (every Nth frame) ────────────────────────────────
+        # ── Motion Detection ──────────────────────────────────────────────
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        gray = cv2.GaussianBlur(gray, (21, 21), 0)
+        motion_detected = False
+
+        if prev_gray is not None:
+            delta = cv2.absdiff(prev_gray, gray)
+            thresh = cv2.threshold(delta, 25, 255, cv2.THRESH_BINARY)[1]
+            motion_score = cv2.countNonZero(thresh)
+            if motion_score > MOTION_THRESHOLD:
+                motion_detected = True
+                last_motion_time = now
+        else:
+            last_motion_time = now
+
+        prev_gray = gray
+
+        # Sleep/wake logic
+        was_sleeping = is_sleeping
+        if now - last_motion_time > SLEEP_AFTER_SECONDS:
+            is_sleeping = True
+        else:
+            is_sleeping = False
+
+        if was_sleeping and not is_sleeping:
+            print("[Motion] Waking up - motion detected")
+            file_logger.info("WAKE - motion detected")
+        elif not was_sleeping and is_sleeping:
+            print("[Motion] Going to sleep - no motion")
+            file_logger.info("SLEEP - no motion")
+
+        # ── If sleeping, draw sleep overlay and skip recognition ────────
+        if is_sleeping:
+            # Dim the frame
+            overlay = frame.copy()
+            cv2.rectangle(overlay, (0, 0), (w, h), (0, 0, 0), -1)
+            frame = cv2.addWeighted(frame, 0.3, overlay, 0.7, 0)
+            # Sleep text
+            cv2.putText(frame, "Sleeping... walk closer to wake",
+                        (w // 2 - 200, h // 2),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (100, 100, 100), 2, cv2.LINE_AA)
+            latest_results = []
+
+            _, buf = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 50])
+            yield (b'--frame\r\n'
+                   b'Content-Type: image/jpeg\r\n\r\n' + buf.tobytes() + b'\r\n')
+            time.sleep(0.5)  # Slower FPS while sleeping to save CPU
+            continue
+
+        # ── Recognition (every Nth frame, only when awake) ───────────────
         if recognition_active and frame_counter % FRAME_SKIP == 0:
             results = engine.recognize_faces(frame)
             latest_results = results
@@ -100,30 +168,29 @@ def generate_frames():
                     marked, direction = db.mark_attendance(name, confidence)
                     if marked and direction:
                         arrow = "-> IN" if direction == "IN" else "<- OUT"
-                        print(f"  {arrow}: {name}  ({confidence:.0%})")
+                        log_msg = f"{arrow}: {name} ({confidence:.0%})"
+                        print(f"  {log_msg}")
+                        file_logger.info(log_msg)
                         recent_events.append({
                             "name": name,
                             "direction": direction,
                             "time": datetime.now().strftime("%H:%M:%S")
                         })
                         recent_events = recent_events[-10:]
-                        # Flash on screen for 3 seconds
                         event_display[name] = {
                             "direction": direction,
                             "expire": now + 3.0
                         }
 
-        # ── Draw bounding boxes ──────────────────────────────────────────
+        # ── Draw bounding boxes ───────────────────────────────────────────
         for name, (top, right, bottom, left), confidence in latest_results:
             colour = (0, 220, 100) if name != "Unknown" else (0, 0, 220)
             cv2.rectangle(frame, (left, top), (right, bottom), colour, 2)
 
-            # Check if this person has a recent event to flash
             event_info = event_display.get(name)
             if event_info and now < event_info["expire"]:
                 dir_label = event_info["direction"]
                 label = f"{name} - {dir_label} ({confidence:.0%})"
-                # Use green for IN, red for OUT
                 colour = (0, 220, 100) if dir_label == "IN" else (0, 100, 255)
             elif name != "Unknown":
                 label = f"{name} ({confidence:.0%})"
@@ -279,10 +346,40 @@ def api_stats():
     return jsonify(db.get_stats())
 
 
+@app.route('/api/status')
+def api_status():
+    """Return system status including sleep/wake state."""
+    return jsonify({
+        "sleeping": is_sleeping,
+        "recognition_active": recognition_active,
+        "registered": len(set(engine.known_names)),
+        "uptime_seconds": int(time.time() - last_motion_time) if is_sleeping else 0
+    })
+
+
+@app.route('/kiosk')
+def kiosk_page():
+    """Fullscreen kiosk view for Pi monitor — camera feed + recent events."""
+    stats = db.get_stats()
+    return render_template('kiosk.html', stats=stats)
+
+
 @app.route('/api/events')
 def api_events():
     """Return recent IN/OUT crossing events."""
     return jsonify(recent_events)
+
+
+@app.route('/api/logs')
+def api_logs():
+    """Return the last N lines from the attendance log file."""
+    n = request.args.get('n', 50, type=int)
+    try:
+        with open(log_file, 'r', encoding='utf-8') as f:
+            lines = f.readlines()
+        return jsonify({"lines": [l.strip() for l in lines[-n:]]})
+    except FileNotFoundError:
+        return jsonify({"lines": []})
 
 
 # ── Export ───────────────────────────────────────────────────────────────────

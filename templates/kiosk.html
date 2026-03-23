@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Attendance Kiosk</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Inter', sans-serif;
+            background: #0a0a1a;
+            color: #e8e8f0;
+            height: 100vh;
+            overflow: hidden;
+            display: flex;
+            cursor: none;
+        }
+
+        /* Left: Camera feed (takes most space) */
+        .camera-section {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #000;
+            position: relative;
+        }
+        .camera-section img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+        }
+
+        /* Status indicator top-left */
+        .status-badge {
+            position: absolute;
+            top: 16px;
+            left: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            background: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(10px);
+        }
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #00d4aa;
+            box-shadow: 0 0 8px #00d4aa;
+            animation: pulse 1.5s ease-in-out infinite;
+        }
+        .status-dot.sleeping {
+            background: #f39c12;
+            box-shadow: 0 0 8px #f39c12;
+            animation: none;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
+        }
+
+        /* Right: Events panel */
+        .events-panel {
+            width: 340px;
+            display: flex;
+            flex-direction: column;
+            background: rgba(255, 255, 255, 0.03);
+            border-left: 1px solid rgba(255, 255, 255, 0.06);
+        }
+
+        .panel-header {
+            padding: 20px 20px 16px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+        }
+        .panel-header h1 {
+            font-size: 1.2rem;
+            font-weight: 800;
+            letter-spacing: -0.5px;
+        }
+        .panel-header .time {
+            font-size: 2.5rem;
+            font-weight: 800;
+            color: #6c63ff;
+            line-height: 1.1;
+        }
+        .panel-header .date {
+            font-size: 0.85rem;
+            color: #9898b0;
+            margin-top: 2px;
+        }
+
+        /* Stats row */
+        .stats-row {
+            display: flex;
+            gap: 1px;
+            background: rgba(255, 255, 255, 0.06);
+        }
+        .stat-box {
+            flex: 1;
+            padding: 14px;
+            text-align: center;
+            background: #0a0a1a;
+        }
+        .stat-num {
+            font-size: 1.5rem;
+            font-weight: 800;
+        }
+        .stat-num.in { color: #00d4aa; }
+        .stat-num.out { color: #ff4757; }
+        .stat-num.total { color: #6c63ff; }
+        .stat-lbl {
+            font-size: 0.7rem;
+            color: #9898b0;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        /* Events list */
+        .events-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 12px;
+        }
+        .event-card {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px;
+            margin-bottom: 8px;
+            border-radius: 10px;
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            animation: slideIn 0.3s ease;
+        }
+        .event-card.fresh {
+            border-color: rgba(108, 99, 255, 0.4);
+            box-shadow: 0 0 15px rgba(108, 99, 255, 0.15);
+        }
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateX(20px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+
+        .event-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 800;
+            font-size: 1rem;
+            color: white;
+            flex-shrink: 0;
+        }
+        .event-avatar.in { background: linear-gradient(135deg, #00d4aa, #00b894); }
+        .event-avatar.out { background: linear-gradient(135deg, #ff4757, #e74c3c); }
+
+        .event-info { flex: 1; }
+        .event-name { font-weight: 600; font-size: 0.95rem; }
+        .event-dir {
+            font-size: 0.75rem;
+            font-weight: 700;
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            margin-top: 2px;
+        }
+        .event-dir.in { background: rgba(0, 212, 170, 0.15); color: #00d4aa; }
+        .event-dir.out { background: rgba(255, 71, 87, 0.15); color: #ff4757; }
+        .event-time {
+            font-size: 0.8rem;
+            color: #606078;
+            font-weight: 500;
+        }
+
+        .empty-msg {
+            text-align: center;
+            color: #606078;
+            padding: 3rem 1rem;
+            font-size: 0.9rem;
+        }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
+    </style>
+</head>
+<body>
+    <!-- Camera Feed -->
+    <div class="camera-section">
+        <img id="cameraFeed" src="/video_feed" alt="Camera">
+        <div class="status-badge">
+            <div class="status-dot" id="statusDot"></div>
+            <span id="statusText">Active</span>
+        </div>
+    </div>
+
+    <!-- Events Panel -->
+    <div class="events-panel">
+        <div class="panel-header">
+            <h1>Attendance</h1>
+            <div class="time" id="clockTime">--:--</div>
+            <div class="date" id="clockDate">--</div>
+        </div>
+
+        <div class="stats-row">
+            <div class="stat-box">
+                <div class="stat-num in" id="statIn">{{ stats.today_in }}</div>
+                <div class="stat-lbl">In</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-num out" id="statOut">{{ stats.today_out }}</div>
+                <div class="stat-lbl">Out</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-num total" id="statTotal">{{ stats.today_present }}</div>
+                <div class="stat-lbl">Today</div>
+            </div>
+        </div>
+
+        <div class="events-list" id="eventsList">
+            <div class="empty-msg">Waiting for someone to scan...</div>
+        </div>
+    </div>
+
+    <script>
+        // Live clock
+        function updateClock() {
+            const now = new Date();
+            document.getElementById('clockTime').textContent =
+                now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+            document.getElementById('clockDate').textContent =
+                now.toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+        }
+        updateClock();
+        setInterval(updateClock, 1000);
+
+        // Auto-refresh events and stats
+        let lastEventCount = 0;
+        setInterval(async () => {
+            try {
+                const [eventsRes, statsRes, statusRes] = await Promise.all([
+                    fetch('/api/events'),
+                    fetch('/api/stats'),
+                    fetch('/api/status')
+                ]);
+                const events = await eventsRes.json();
+                const stats = await statsRes.json();
+                const status = await statusRes.json();
+
+                // Update stats
+                document.getElementById('statIn').textContent = stats.today_in;
+                document.getElementById('statOut').textContent = stats.today_out;
+                document.getElementById('statTotal').textContent = stats.today_present;
+
+                // Update status
+                const dot = document.getElementById('statusDot');
+                const text = document.getElementById('statusText');
+                if (status.sleeping) {
+                    dot.classList.add('sleeping');
+                    text.textContent = 'Sleeping';
+                } else {
+                    dot.classList.remove('sleeping');
+                    text.textContent = 'Active';
+                }
+
+                // Update events list
+                if (events.length > 0) {
+                    const isNew = events.length !== lastEventCount;
+                    lastEventCount = events.length;
+
+                    const html = events.slice().reverse().map((e, i) => {
+                        const initial = e.name.charAt(0).toUpperCase();
+                        const dirClass = e.direction.toLowerCase();
+                        const dirLabel = e.direction === 'IN' ? '→ IN' : '← OUT';
+                        const freshClass = i === 0 && isNew ? 'fresh' : '';
+                        return `
+                            <div class="event-card ${freshClass}">
+                                <div class="event-avatar ${dirClass}">${initial}</div>
+                                <div class="event-info">
+                                    <div class="event-name">${e.name}</div>
+                                    <span class="event-dir ${dirClass}">${dirLabel}</span>
+                                </div>
+                                <div class="event-time">${e.time}</div>
+                            </div>`;
+                    }).join('');
+                    document.getElementById('eventsList').innerHTML = html;
+                }
+            } catch (err) { /* ignore */ }
+        }, 2000);
+    </script>
+</body>
+</html>
