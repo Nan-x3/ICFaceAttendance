@@ -1,0 +1,198 @@
+{% extends "base.html" %}
+{% block title %}Register New Person{% endblock %}
+
+{% block content %}
+<header class="page-header">
+    <div>
+        <h1>Register New Person</h1>
+        <p class="subtitle">Capture photos from the camera to register a new face</p>
+    </div>
+</header>
+
+<div class="register-grid">
+    <!-- Capture Panel -->
+    <div class="card">
+        <div class="card-header">
+            <h2>Capture Photos</h2>
+        </div>
+        <div class="register-form">
+            <div class="form-group">
+                <label for="personName">Person Name</label>
+                <input type="text" id="personName" placeholder="Enter full name..." autocomplete="off">
+            </div>
+
+            <div class="camera-preview-wrapper">
+                <img id="previewImg" src="{{ url_for('video_feed') }}" alt="Camera Preview">
+                <div class="capture-overlay" id="captureOverlay">
+                    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="16 12 12 8 8 12"/><line x1="12" y1="16" x2="12" y2="8"/></svg>
+                    <span>Photo captured!</span>
+                </div>
+            </div>
+
+            <div class="capture-controls">
+                <button id="captureBtn" class="btn btn-primary" onclick="capturePhoto()">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+                    Capture Photo
+                </button>
+                <button id="registerBtn" class="btn btn-success" onclick="registerPerson()" disabled>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/></svg>
+                    Register
+                </button>
+            </div>
+
+            <!-- Captured photos strip -->
+            <div class="photos-strip" id="photosStrip"></div>
+
+            <div class="capture-info">
+                <span id="photoCount">0</span> photo(s) captured
+                <span class="muted"> · Minimum 3 required</span>
+            </div>
+
+            <!-- Status message -->
+            <div id="registerStatus" class="status-message" style="display:none;"></div>
+        </div>
+    </div>
+
+    <!-- Registered People -->
+    <div class="card">
+        <div class="card-header">
+            <h2>Registered People</h2>
+            <span class="badge">{{ registered | length }}</span>
+        </div>
+        <div class="registered-list" id="registeredList">
+            {% if registered %}
+                {% for person in registered %}
+                <div class="person-item">
+                    <div class="person-info">
+                        <div class="avatar">{{ person.name[0] | upper }}</div>
+                        <div>
+                            <div class="person-name">{{ person.name }}</div>
+                            <div class="person-meta">{{ person.num_photos }} photo(s)</div>
+                        </div>
+                    </div>
+                    <button class="btn btn-sm btn-danger-outline" onclick="deletePerson('{{ person.name }}')">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                    </button>
+                </div>
+                {% endfor %}
+            {% else %}
+                <div class="empty-state">
+                    <p>No registered people yet.</p>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const capturedImages = [];
+
+async function capturePhoto() {
+    const name = document.getElementById('personName').value.trim();
+    if (!name) {
+        showStatus('Please enter a name first.', 'error');
+        document.getElementById('personName').focus();
+        return;
+    }
+
+    try {
+        const res = await fetch('/api/capture_frame');
+        const data = await res.json();
+        if (data.image) {
+            capturedImages.push(data.image);
+            updatePhotosStrip();
+
+            // Flash overlay
+            const overlay = document.getElementById('captureOverlay');
+            overlay.classList.add('show');
+            setTimeout(() => overlay.classList.remove('show'), 600);
+
+            if (capturedImages.length >= 3) {
+                document.getElementById('registerBtn').disabled = false;
+            }
+        } else {
+            showStatus('Failed to capture photo.', 'error');
+        }
+    } catch(e) {
+        showStatus('Camera error. Is the server running?', 'error');
+    }
+}
+
+function updatePhotosStrip() {
+    const strip = document.getElementById('photosStrip');
+    strip.innerHTML = capturedImages.map((img, i) =>
+        `<div class="photo-thumb"><img src="${img}" alt="Photo ${i+1}"><span class="thumb-num">${i+1}</span></div>`
+    ).join('');
+    document.getElementById('photoCount').textContent = capturedImages.length;
+}
+
+async function registerPerson() {
+    const name = document.getElementById('personName').value.trim();
+    if (!name) {
+        showStatus('Please enter a name.', 'error');
+        return;
+    }
+    if (capturedImages.length < 3) {
+        showStatus('Please capture at least 3 photos.', 'error');
+        return;
+    }
+
+    const btn = document.getElementById('registerBtn');
+    btn.disabled = true;
+    btn.textContent = 'Registering...';
+    showStatus('Processing face encodings...', 'info');
+
+    try {
+        const res = await fetch('/api/register', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name, images: capturedImages })
+        });
+        const data = await res.json();
+
+        if (data.success) {
+            showStatus(data.message, 'success');
+            capturedImages.length = 0;
+            updatePhotosStrip();
+            document.getElementById('personName').value = '';
+            btn.textContent = 'Register';
+            // Reload to update the registered list
+            setTimeout(() => location.reload(), 1500);
+        } else {
+            showStatus(data.error || 'Registration failed.', 'error');
+            btn.disabled = false;
+            btn.textContent = 'Register';
+        }
+    } catch(e) {
+        showStatus('Server error during registration.', 'error');
+        btn.disabled = false;
+        btn.textContent = 'Register';
+    }
+}
+
+async function deletePerson(name) {
+    if (!confirm(`Delete "${name}" and all their data?`)) return;
+
+    try {
+        const res = await fetch('/api/delete_person', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name })
+        });
+        const data = await res.json();
+        if (data.success) location.reload();
+    } catch(e) {
+        alert('Failed to delete person.');
+    }
+}
+
+function showStatus(msg, type) {
+    const el = document.getElementById('registerStatus');
+    el.textContent = msg;
+    el.className = `status-message ${type}`;
+    el.style.display = 'block';
+}
+</script>
+{% endblock %}

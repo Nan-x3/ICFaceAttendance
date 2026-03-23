@@ -1,0 +1,172 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+
+{% block content %}
+<header class="page-header">
+    <div>
+        <h1>Dashboard</h1>
+        <p class="subtitle">{{ today }}</p>
+    </div>
+    <button id="toggleBtn" class="btn {{ 'btn-danger' if recognition_active else 'btn-success' }}" onclick="toggleRecognition()">
+        <span class="status-dot {{ 'active' if recognition_active else 'paused' }}"></span>
+        {{ "Pause Recognition" if recognition_active else "Resume Recognition" }}
+    </button>
+</header>
+
+<!-- Stats Cards -->
+<div class="stats-grid">
+    <div class="stat-card">
+        <div class="stat-icon present">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><polyline points="17 11 19 13 23 9"/></svg>
+        </div>
+        <div class="stat-info">
+            <span class="stat-number" id="statPresent">{{ stats.today_present }}</span>
+            <span class="stat-label">Present Today</span>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon" style="background: rgba(0,212,170,0.15); color: #00d4aa;">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 3 21 3 21 9"/><line x1="21" y1="3" x2="14" y2="10"/><path d="M21 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h6"/></svg>
+        </div>
+        <div class="stat-info">
+            <span class="stat-number" id="statIn">{{ stats.today_in }}</span>
+            <span class="stat-label">Checked IN</span>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon" style="background: rgba(255,71,87,0.15); color: #ff4757;">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 21 3 21 3 15"/><line x1="3" y1="21" x2="10" y2="14"/><path d="M21 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h6"/></svg>
+        </div>
+        <div class="stat-info">
+            <span class="stat-number" id="statOut">{{ stats.today_out }}</span>
+            <span class="stat-label">Checked OUT</span>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon registered">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        </div>
+        <div class="stat-info">
+            <span class="stat-number" id="statRegistered">{{ stats.total_registered }}</span>
+            <span class="stat-label">Registered</span>
+        </div>
+    </div>
+</div>
+
+<!-- Main Content: Camera + Attendance Table -->
+<div class="dashboard-grid">
+    <!-- Live Camera Feed -->
+    <div class="card camera-card">
+        <div class="card-header">
+            <h2>Live Camera Feed</h2>
+            <span class="live-badge"><span class="live-dot"></span> LIVE</span>
+        </div>
+        <div class="camera-wrapper">
+            <img id="cameraFeed" src="{{ url_for('video_feed') }}" alt="Live Camera Feed">
+        </div>
+        <!-- Recent events ticker -->
+        <div id="eventsTicker" class="events-ticker"></div>
+    </div>
+
+    <!-- Today's Attendance -->
+    <div class="card attendance-card">
+        <div class="card-header">
+            <h2>Today's Attendance</h2>
+            <a href="/export?start={{ stats.today_present and attendance[0].date if attendance else '' }}" class="btn btn-sm btn-outline">Export CSV</a>
+        </div>
+        <div class="table-wrapper" id="attendanceTable">
+            {% if attendance %}
+            <table>
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Name</th>
+                        <th>Direction</th>
+                        <th>Time</th>
+                        <th>Confidence</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for record in attendance %}
+                    <tr class="fade-in" style="animation-delay: {{ loop.index0 * 0.05 }}s">
+                        <td class="row-num">{{ loop.index }}</td>
+                        <td class="name-cell">
+                            <div class="avatar">{{ record.name[0] | upper }}</div>
+                            {{ record.name }}
+                        </td>
+                        <td>
+                            <span class="direction-badge {{ (record.direction or 'IN') | lower }}">
+                                {{ '→ IN' if (record.direction or 'IN') == 'IN' else '← OUT' }}
+                            </span>
+                        </td>
+                        <td>{{ record.time_in }}</td>
+                        <td>
+                            {% if record.confidence %}
+                            <span class="confidence-badge">{{ "%.0f" | format(record.confidence * 100) }}%</span>
+                            {% else %}
+                            <span class="confidence-badge low">N/A</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <div class="empty-state">
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.3"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                <p>No attendance records yet today.</p>
+                <p class="small">Walk past the camera — cross the line left→right to check IN, right→left to check OUT.</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Auto-refresh every 5 seconds
+    setInterval(async () => {
+        try {
+            const [attRes, statsRes, eventsRes] = await Promise.all([
+                fetch('/api/attendance/today'),
+                fetch('/api/stats'),
+                fetch('/api/events')
+            ]);
+            const attendance = await attRes.json();
+            const stats = await statsRes.json();
+            const events = await eventsRes.json();
+
+            document.getElementById('statPresent').textContent = stats.today_present;
+            document.getElementById('statIn').textContent = stats.today_in;
+            document.getElementById('statOut').textContent = stats.today_out;
+            document.getElementById('statRegistered').textContent = stats.total_registered;
+
+            // Update events ticker
+            if (events.length > 0) {
+                const ticker = document.getElementById('eventsTicker');
+                ticker.innerHTML = events.slice(-5).reverse().map(e =>
+                    `<div class="event-item ${e.direction.toLowerCase()}">
+                        <span class="event-dir">${e.direction === 'IN' ? '→ IN' : '← OUT'}</span>
+                        <span class="event-name">${e.name}</span>
+                        <span class="event-time">${e.time}</span>
+                    </div>`
+                ).join('');
+            }
+
+            if (attendance.length > 0) {
+                let html = `<table><thead><tr><th>#</th><th>Name</th><th>Direction</th><th>Time</th><th>Confidence</th></tr></thead><tbody>`;
+                attendance.forEach((r, i) => {
+                    const conf = r.confidence ? Math.round(r.confidence * 100) + '%' : 'N/A';
+                    const initial = r.name.charAt(0).toUpperCase();
+                    const dir = r.direction || 'IN';
+                    const dirLabel = dir === 'IN' ? '→ IN' : '← OUT';
+                    html += `<tr class="fade-in"><td class="row-num">${i+1}</td><td class="name-cell"><div class="avatar">${initial}</div>${r.name}</td><td><span class="direction-badge ${dir.toLowerCase()}">${dirLabel}</span></td><td>${r.time_in}</td><td><span class="confidence-badge">${conf}</span></td></tr>`;
+                });
+                html += '</tbody></table>';
+                document.getElementById('attendanceTable').innerHTML = html;
+            }
+        } catch(e) { /* ignore */ }
+    }, 5000);
+</script>
+{% endblock %}

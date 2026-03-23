@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+{% block title %}Attendance History{% endblock %}
+
+{% block content %}
+<header class="page-header">
+    <div>
+        <h1>Attendance History</h1>
+        <p class="subtitle">View and export attendance records by date</p>
+    </div>
+</header>
+
+<div class="card">
+    <div class="card-header">
+        <div class="date-picker-group">
+            <label for="dateSelect">Select Date:</label>
+            <input type="date" id="dateSelect" value="{{ selected_date }}" onchange="changeDate()">
+        </div>
+        <div class="header-actions">
+            <button class="btn btn-sm btn-outline" onclick="exportRange()">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                Export CSV
+            </button>
+        </div>
+    </div>
+
+    <div class="table-wrapper">
+        {% if records %}
+        <table>
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Name</th>
+                    <th>Direction</th>
+                    <th>Date</th>
+                    <th>Time</th>
+                    <th>Confidence</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for record in records %}
+                <tr class="fade-in" style="animation-delay: {{ loop.index0 * 0.03 }}s">
+                    <td class="row-num">{{ loop.index }}</td>
+                    <td class="name-cell">
+                        <div class="avatar">{{ record.name[0] | upper }}</div>
+                        {{ record.name }}
+                    </td>
+                    <td>
+                        <span class="direction-badge {{ (record.direction or 'IN') | lower }}">
+                            {{ '→ IN' if (record.direction or 'IN') == 'IN' else '← OUT' }}
+                        </span>
+                    </td>
+                    <td>{{ record.date }}</td>
+                    <td>{{ record.time_in }}</td>
+                    <td>
+                        {% if record.confidence %}
+                        <span class="confidence-badge">{{ "%.0f" | format(record.confidence * 100) }}%</span>
+                        {% else %}
+                        <span class="confidence-badge low">N/A</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        <div class="table-footer">
+            <span>{{ records | length }} record(s) found</span>
+        </div>
+        {% else %}
+        <div class="empty-state">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.3"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+            <p>No attendance records for this date.</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Export Range Modal -->
+<div id="exportModal" class="modal" style="display:none;">
+    <div class="modal-content card">
+        <h3>Export Attendance</h3>
+        <div class="form-row">
+            <div class="form-group">
+                <label for="exportStart">From</label>
+                <input type="date" id="exportStart">
+            </div>
+            <div class="form-group">
+                <label for="exportEnd">To</label>
+                <input type="date" id="exportEnd">
+            </div>
+        </div>
+        <div class="modal-actions">
+            <button class="btn btn-outline" onclick="closeModal()">Cancel</button>
+            <button class="btn btn-primary" onclick="doExport()">Download CSV</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function changeDate() {
+    const date = document.getElementById('dateSelect').value;
+    window.location.href = `/attendance?date=${date}`;
+}
+
+function exportRange() {
+    const today = new Date().toISOString().split('T')[0];
+    document.getElementById('exportStart').value = today;
+    document.getElementById('exportEnd').value = today;
+    document.getElementById('exportModal').style.display = 'flex';
+}
+
+function closeModal() {
+    document.getElementById('exportModal').style.display = 'none';
+}
+
+function doExport() {
+    const start = document.getElementById('exportStart').value;
+    const end = document.getElementById('exportEnd').value;
+    window.location.href = `/export?start=${start}&end=${end}`;
+    closeModal();
+}
+
+// Close modal on background click
+document.getElementById('exportModal').addEventListener('click', (e) => {
+    if (e.target.id === 'exportModal') closeModal();
+});
+</script>
+{% endblock %}
