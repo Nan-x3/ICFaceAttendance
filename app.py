@@ -1,4 +1,4 @@
-"""
++"""
 Face Recognition Attendance System — Flask Web Application.
 Main entry point. Run with: python app.py
 """
