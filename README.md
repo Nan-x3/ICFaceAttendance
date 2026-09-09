@@ -397,7 +397,7 @@ Or automate with a cron job:
 
 ## 📄 License
 
-This project is developed for internal use at Whoopmasters.
+This project is developed for internal use at Innovation Centre.
 
 ---
 
