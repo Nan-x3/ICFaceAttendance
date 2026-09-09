@@ -1,4 +1,4 @@
-+"""
+"""
 Face Recognition Attendance System — Flask Web Application.
 Main entry point. Run with: python app.py
 """
@@ -7,6 +7,7 @@ import cv2
 import sys
 import time
 import json
+import serial
 import base64
 import threading
 import traceback
@@ -60,6 +61,14 @@ prev_gray = None
 last_motion_time = time.time()
 is_sleeping = False
 
+# ── ESP32 Serial Door Lock Setup ─────────────────────────────────────────────
+try:
+    esp32 = serial.Serial('/dev/ttyUSB1', 9600, timeout=1)
+    time.sleep(2)  # Give ESP32 time to reboot
+    print("ESP32 connected successfully for door lock.")
+except Exception as e:
+    print(f"Warning: Could not connect to ESP32: {e}")
+    esp32 = None
 
 # ── Camera Helpers ───────────────────────────────────────────────────────────
 def get_camera():
@@ -86,7 +95,7 @@ def read_frame():
     cam = get_camera()
     if CAMERA_SOURCE == "picamera2":
         frame = cam.capture_array()
-        frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+        
         return True, frame
     else:
         return cam.read()
@@ -187,6 +196,10 @@ def generate_frames():
                         log_msg = f"{arrow}: {name} ({confidence:.0%})"
                         print(f"  {log_msg}")
                         file_logger.info(log_msg)
+			# Trigger ESP32 Door Unlock
+                        if esp32 and esp32.is_open:
+                            esp32.write(b'UNLOCK\n')
+                            print("  [Door] Sent UNLOCK command to ESP32.")
                         recent_events.append({
                             "name": name,
                             "direction": direction,

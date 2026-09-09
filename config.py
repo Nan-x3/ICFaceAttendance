@@ -12,7 +12,7 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 # ---------------------
 # 0 = default USB/laptop webcam (Windows/Linux)
 # "picamera2" = Raspberry Pi Camera Module
-CAMERA_SOURCE = 0
+CAMERA_SOURCE = "picamera2"
 CAMERA_RESOLUTION = (640, 480)
 FRAME_RATE = 24
 

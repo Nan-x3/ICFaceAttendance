@@ -24,11 +24,9 @@ sudo apt-get install -y \
     python3-venv \
     cmake \
     build-essential \
-    libatlas-base-dev \
+    libatlas3-base \
     libhdf5-dev \
-    libjasper-dev \
     libqt5gui5 \
-    libqt5webkit5 \
     libqt5test5 \
     libgstreamer1.0-dev \
     python3-picamera2 \
