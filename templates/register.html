@@ -21,6 +21,16 @@
                 <input type="text" id="personName" placeholder="Enter full name..." autocomplete="off">
             </div>
 
+            <div class="form-group">
+                <label for="qrId">QR Code (Optional)</label>
+                <input type="text" id="qrId" placeholder="Scan QR code..." autocomplete="off">
+            </div>
+
+            <div class="form-group">
+                <label for="registrationNumber">Registration Number (Optional)</label>
+                <input type="text" id="registrationNumber" placeholder="e.g. 2023003299" autocomplete="off">
+            </div>
+
             <div class="camera-preview-wrapper">
                 <img id="previewImg" src="{{ url_for('video_feed') }}" alt="Camera Preview">
                 <div class="capture-overlay" id="captureOverlay">
@@ -88,6 +98,30 @@
 {% block scripts %}
 <script>
 const capturedImages = [];
+let lastAutoQrId = '';
+
+async function pollQrCode() {
+    try {
+        const res = await fetch('/api/qr/latest');
+        const data = await res.json();
+        const qrInput = document.getElementById('qrId');
+
+        if (data.qr_id && (!qrInput.value || qrInput.value === lastAutoQrId)) {
+            qrInput.value = data.qr_id;
+            lastAutoQrId = data.qr_id;
+            updateRegisterButton();
+        }
+    } catch (e) {
+        // QR scanning remains available even if a polling request fails.
+    }
+}
+
+setInterval(pollQrCode, 500);
+pollQrCode();
+
+['personName', 'qrId', 'registrationNumber'].forEach((id) => {
+    document.getElementById(id).addEventListener('input', updateRegisterButton);
+});
 
 async function capturePhoto() {
     const name = document.getElementById('personName').value.trim();
@@ -126,29 +160,45 @@ function updatePhotosStrip() {
         `<div class="photo-thumb"><img src="${img}" alt="Photo ${i+1}"><span class="thumb-num">${i+1}</span></div>`
     ).join('');
     document.getElementById('photoCount').textContent = capturedImages.length;
+    updateRegisterButton();
+}
+
+function updateRegisterButton() {
+    const hasMapping = document.getElementById('personName').value.trim()
+        && document.getElementById('qrId').value.trim()
+        && document.getElementById('registrationNumber').value.trim();
+    document.getElementById('registerBtn').disabled = !hasMapping && capturedImages.length < 3;
 }
 
 async function registerPerson() {
     const name = document.getElementById('personName').value.trim();
+    const qrId = document.getElementById('qrId').value.trim();
+    const registrationNumber = document.getElementById('registrationNumber').value.trim();
     if (!name) {
         showStatus('Please enter a name.', 'error');
         return;
     }
-    if (capturedImages.length < 3) {
-        showStatus('Please capture at least 3 photos.', 'error');
+    const mappingOnly = name && qrId && registrationNumber && capturedImages.length === 0;
+    if (!mappingOnly && capturedImages.length < 3) {
+        showStatus('Provide all three identity fields or capture at least 3 photos.', 'error');
         return;
     }
 
     const btn = document.getElementById('registerBtn');
     btn.disabled = true;
     btn.textContent = 'Registering...';
-    showStatus('Processing face encodings...', 'info');
+    showStatus(mappingOnly ? 'Saving QR identity...' : 'Processing face encodings...', 'info');
 
     try {
         const res = await fetch('/api/register', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name, images: capturedImages })
+            body: JSON.stringify({
+                name,
+                qr_id: qrId,
+                registration_number: registrationNumber,
+                images: capturedImages
+            })
         });
         const data = await res.json();
 
@@ -157,6 +207,8 @@ async function registerPerson() {
             capturedImages.length = 0;
             updatePhotosStrip();
             document.getElementById('personName').value = '';
+            document.getElementById('qrId').value = '';
+            document.getElementById('registrationNumber').value = '';
             btn.textContent = 'Register';
             // Reload to update the registered list
             setTimeout(() => location.reload(), 1500);

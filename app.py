@@ -8,6 +8,7 @@ import sys
 import time
 import json
 import serial
+import serial.tools.list_ports
 import base64
 import threading
 import traceback
@@ -15,6 +16,7 @@ import tempfile
 import subprocess
 import logging
 import numpy as np
+from pyzbar.pyzbar import decode
 from datetime import datetime
 from io import BytesIO
 from flask import (
@@ -24,7 +26,7 @@ from flask import (
 from config import (
     FLASK_HOST, FLASK_PORT, SECRET_KEY, CAMERA_SOURCE,
     CAMERA_RESOLUTION, FRAME_RATE, FRAME_SKIP, SCAN_COOLDOWN_SECONDS,
-    SLEEP_AFTER_SECONDS, MOTION_THRESHOLD
+    SLEEP_AFTER_SECONDS, MOTION_THRESHOLD, KNOWN_FACES_DIR, MAX_FACE_PHOTOS
 )
 from recognition_engine import FaceRecognitionEngine
 from attendance import AttendanceDB
@@ -51,6 +53,9 @@ engine = FaceRecognitionEngine()
 camera = None
 camera_lock = threading.Lock()
 latest_results = []          # Most recent recognition results
+latest_qr_id = None          # Most recently decoded QR value
+latest_qr_seen_at = 0.0      # Timestamp of the most recent QR decode
+qr_unlock_times = {}         # QR value -> last door unlock timestamp
 recognition_active = True    # Pause/resume toggle
 frame_counter = 0
 recent_events = []           # Recent IN/OUT events for on-screen display
@@ -61,14 +66,23 @@ prev_gray = None
 last_motion_time = time.time()
 is_sleeping = False
 
-# ── ESP32 Serial Door Lock Setup ─────────────────────────────────────────────
-try:
-    esp32 = serial.Serial('/dev/ttyUSB1', 9600, timeout=1)
-    time.sleep(2)  # Give ESP32 time to reboot
-    print("ESP32 connected successfully for door lock.")
-except Exception as e:
-    print(f"Warning: Could not connect to ESP32: {e}")
-    esp32 = None
+# ── ESP32 Serial Door Lock Setup (Auto-Detect) ─────────────────────────────
+def init_esp32():
+    ports = serial.tools.list_ports.comports()
+    for port in ports:
+        print(f"[Serial] Checking available port: {port.device} - {port.description}")
+        try:
+            ser = serial.Serial(port.device, 9600, timeout=1)
+            time.sleep(2)  # Give ESP32 time to reboot upon connection
+            print(f"ESP32 connected successfully on {port.device}.")
+            return ser
+        except Exception as e:
+            print(f"[Serial] Failed to open {port.device}: {e}")
+    return None
+
+esp32 = init_esp32()
+if not esp32:
+    print("Warning: Could not detect or connect to ESP32 on any port.")
 
 # ── Camera Helpers ───────────────────────────────────────────────────────────
 def get_camera():
@@ -95,16 +109,61 @@ def read_frame():
     cam = get_camera()
     if CAMERA_SOURCE == "picamera2":
         frame = cam.capture_array()
-        
+        frame = cv2.flip(frame, 1)
         return True, frame
     else:
-        return cam.read()
+        ok, frame = cam.read()
+        if ok:
+            frame = cv2.flip(frame, 1)
+        return ok, frame
+
+
+def decode_qr_values(frame):
+    """Decode QR values using several image treatments for card glare."""
+    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY) if len(frame.shape) == 3 else frame
+    variants = [gray]
+
+    enhanced = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8)).apply(gray)
+    variants.append(enhanced)
+    variants.append(cv2.adaptiveThreshold(
+        enhanced, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+        cv2.THRESH_BINARY, blockSize=31, C=5
+    ))
+
+    decoded = {}
+    for image in variants:
+        for barcode in decode(image):
+            value = barcode.data.decode("utf-8").strip()
+            if value and value not in decoded:
+                decoded[value] = [(point.x, point.y) for point in barcode.polygon]
+
+    if decoded:
+        return list(decoded.items())
+
+    detector = cv2.QRCodeDetector()
+    for image in variants:
+        try:
+            found, values, points, _ = detector.detectAndDecodeMulti(image)
+            if found:
+                for index, value in enumerate(values):
+                    value = value.strip()
+                    if value and value not in decoded:
+                        polygon = points[index].astype(int).tolist() if points is not None else None
+                        decoded[value] = polygon
+        except (AttributeError, cv2.error):
+            value, points, _ = detector.detectAndDecode(image)
+            value = value.strip()
+            if value and value not in decoded:
+                decoded[value] = points[0].astype(int).tolist() if points is not None else None
+
+    return list(decoded.items())
 
 
 # ── MJPEG Stream Generator ──────────────────────────────────────────────────
 def generate_frames():
     """Yield JPEG frames with motion detection, recognition, and overlays."""
-    global latest_results, frame_counter, recent_events, event_display
+    global latest_results, latest_qr_id, latest_qr_seen_at, qr_unlock_times
+    global frame_counter, recent_events, event_display
     global prev_gray, last_motion_time, is_sleeping
 
     while True:
@@ -133,6 +192,64 @@ def generate_frames():
         h, w = frame.shape[:2]
         frame_counter += 1
         now = time.time()
+
+        # ── Pyzbar QR Code Scanning & Registration Number Mapping ─────────
+        try:
+            qr_values = decode_qr_values(frame)
+
+            user_map = {}
+            users_path = os.path.join(os.path.dirname(__file__), "users_directory.json")
+            if os.path.exists(users_path):
+                with open(users_path, "r", encoding="utf-8") as json_file:
+                    user_map = json.load(json_file)
+
+            for reg_number, polygon in qr_values:
+                if reg_number:
+                    latest_qr_id = reg_number
+                    latest_qr_seen_at = time.time()
+                    person_name = user_map.get(reg_number)
+                    if not person_name:
+                        print(f"[QR] Ignoring unregistered QR ID: {reg_number}")
+                        continue
+
+                    print(f"[+] Scanned QR ID: {reg_number} -> {person_name}")
+                    file_logger.info(f"QR Scanned: {person_name} ({reg_number})")
+
+                    marked, direction = db.mark_attendance(person_name, 1.0)
+                    if marked:
+                        log_msg = f"-> IN (QR Unlocked): {person_name} [{reg_number}]"
+                        print(f"  {log_msg}")
+                        file_logger.info(log_msg)
+
+                        recent_events.append({
+                            "name": person_name,
+                            "direction": direction or "IN",
+                            "time": datetime.now().strftime("%H:%M:%S")
+                        })
+                        recent_events = recent_events[-10:]
+                        event_display[person_name] = {
+                            "direction": direction or "IN",
+                            "expire": now + 3.0
+                        }
+
+                    if (esp32 and esp32.is_open
+                            and now - qr_unlock_times.get(reg_number, 0) >= 2.0):
+                        esp32.write(b"UNLOCK\n")
+                        qr_unlock_times[reg_number] = now
+                        print("  [Door] Sent UNLOCK command to ESP32.")
+                    elif not esp32 or not esp32.is_open:
+                        print("  [Door] ESP32 is not connected; cannot unlock.")
+
+                    if polygon:
+                        pts = np.array(polygon, dtype=np.int32)
+                        cv2.polylines(frame, [pts], True, (0, 255, 0), 3)
+                        top_left = (pts[0][0], max(20, pts[0][1] - 10))
+                        cv2.putText(frame, f"{person_name}", top_left,
+                                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2, cv2.LINE_AA)
+        except (OSError, json.JSONDecodeError, UnicodeDecodeError) as error:
+            print(f"[QR] Failed to process QR mapping: {error}")
+        except Exception:
+            pass
 
         # ── Motion Detection ──────────────────────────────────────────────
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
@@ -200,6 +317,30 @@ def generate_frames():
                         if esp32 and esp32.is_open:
                             esp32.write(b'UNLOCK\n')
                             print("  [Door] Sent UNLOCK command to ESP32.")
+
+                        # Add only high-confidence, confirmed matches to the training set.
+                        if confidence > 0.58:
+                            person_dir = os.path.join(KNOWN_FACES_DIR, name)
+                            os.makedirs(person_dir, exist_ok=True)
+                            enforce_face_photo_limit(name, MAX_FACE_PHOTOS - 1)
+                            top, right, bottom, left = _loc
+                            height = bottom - top
+                            width = right - left
+                            y1 = max(0, top - int(height * 0.2))
+                            y2 = min(frame.shape[0], bottom + int(height * 0.2))
+                            x1 = max(0, left - int(width * 0.2))
+                            x2 = min(frame.shape[1], right + int(width * 0.2))
+                            face_crop = frame[y1:y2, x1:x2]
+
+                            if face_crop.size > 0:
+                                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                                auto_img_path = os.path.join(
+                                    person_dir, f"auto_{timestamp}.jpg"
+                                )
+                                cv2.imwrite(auto_img_path, face_crop)
+                                print(f"  [AI Learning] Added training face for {name} ({confidence:.0%})")
+                                engine.rebuild_encodings()
+
                         recent_events.append({
                             "name": name,
                             "direction": direction,
@@ -213,7 +354,10 @@ def generate_frames():
 
         # ── Draw bounding boxes ───────────────────────────────────────────
         for name, (top, right, bottom, left), confidence in latest_results:
-            colour = (0, 220, 100) if name != "Unknown" else (0, 0, 220)
+            if name == "Unknown":
+                continue
+
+            colour = (0, 220, 100)
             cv2.rectangle(frame, (left, top), (right, bottom), colour, 2)
 
             event_info = event_display.get(name)
@@ -278,6 +422,50 @@ def register_page():
     return render_template('register.html', registered=registered)
 
 
+def save_user_mappings(name, mapping_ids):
+    """Save QR and registration-number aliases for a person."""
+    if not mapping_ids:
+        return
+
+    map_file = os.path.join(os.path.dirname(__file__), "users_directory.json")
+    user_map = {}
+    try:
+        with open(map_file, "r", encoding="utf-8") as json_file:
+            user_map = json.load(json_file)
+        if not isinstance(user_map, dict):
+            user_map = {}
+    except (FileNotFoundError, json.JSONDecodeError):
+        pass
+
+    for mapping_id in mapping_ids:
+        user_map[mapping_id] = name
+    with open(map_file, "w", encoding="utf-8") as json_file:
+        json.dump(user_map, json_file, indent=4)
+    print(f"[Register] Linked IDs {sorted(mapping_ids)} to '{name}'.")
+
+
+def enforce_face_photo_limit(name, limit=MAX_FACE_PHOTOS):
+    """Keep only the newest face photos for a person."""
+    person_dir = os.path.join(KNOWN_FACES_DIR, name)
+    if not os.path.isdir(person_dir):
+        return 0
+
+    image_files = [
+        os.path.join(person_dir, filename)
+        for filename in os.listdir(person_dir)
+        if filename.lower().endswith(('.jpg', '.jpeg', '.png', '.bmp'))
+    ]
+    image_files.sort(key=lambda path: (os.path.getmtime(path), path))
+
+    for image_path in image_files[:-limit]:
+        try:
+            os.remove(image_path)
+        except OSError as error:
+            print(f"[Register] Could not remove old face photo {image_path}: {error}")
+
+    return min(len(image_files), limit)
+
+
 @app.route('/api/register', methods=['POST'])
 def api_register():
     """Register a new person. Pauses recognition during processing."""
@@ -287,12 +475,22 @@ def api_register():
     try:
         data = request.get_json(force=True)
         name = data.get('name', '').strip()
+        qr_id = data.get('qr_id', '').strip()
+        registration_number = data.get('registration_number', '').strip()
         images_b64 = data.get('images', [])
+        mapping_ids = {value for value in (qr_id, registration_number) if value}
 
         if not name:
             return jsonify({"error": "Name is required"}), 400
         if not images_b64:
-            return jsonify({"error": "No images provided"}), 400
+            if not (qr_id and registration_number):
+                return jsonify({"error": "Provide a QR code and registration number, or capture at least 3 photos."}), 400
+            person_dir = os.path.join(KNOWN_FACES_DIR, name)
+            photo_count = enforce_face_photo_limit(name)
+            db.register_person(name, photo_count)
+            save_user_mappings(name, mapping_ids)
+            return jsonify({"success": True,
+                            "message": f"Registered '{name}' with QR and registration number."})
 
         # Pause recognition during registration
         recognition_active = False
@@ -351,8 +549,11 @@ def api_register():
 
         count = output.get("count", 0)
         if count > 0:
-            engine.load_encodings()
-            db.register_person(name, count)
+            photo_count = enforce_face_photo_limit(name)
+            engine.rebuild_encodings()
+            db.register_person(name, photo_count)
+            save_user_mappings(name, mapping_ids)
+
             recognition_active = was_active
             print(f"[Register] Done. Resuming recognition.")
             return jsonify({"success": True,
@@ -461,6 +662,14 @@ def capture_frame():
     return jsonify({"error": "Camera capture failed"}), 500
 
 
+@app.route('/api/qr/latest')
+def latest_qr():
+    """Return a recently scanned QR value for the registration form."""
+    if latest_qr_id and time.time() - latest_qr_seen_at <= 5:
+        return jsonify({"qr_id": latest_qr_id})
+    return jsonify({"qr_id": None})
+
+
 @app.route('/api/delete_person', methods=['POST'])
 def api_delete_person():
     data = request.get_json(force=True)
@@ -468,6 +677,19 @@ def api_delete_person():
     if name:
         engine.delete_person(name)
         db.delete_person(name)
+        map_file = os.path.join(os.path.dirname(__file__), "users_directory.json")
+        try:
+            with open(map_file, "r", encoding="utf-8") as json_file:
+                user_map = json.load(json_file)
+            user_map = {
+                mapping_id: mapped_name
+                for mapping_id, mapped_name in user_map.items()
+                if mapped_name != name
+            }
+            with open(map_file, "w", encoding="utf-8") as json_file:
+                json.dump(user_map, json_file, indent=4)
+        except (FileNotFoundError, json.JSONDecodeError):
+            pass
         return jsonify({"success": True})
     return jsonify({"error": "Name is required"}), 400
 

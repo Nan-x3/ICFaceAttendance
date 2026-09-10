@@ -52,10 +52,9 @@ class AttendanceDB:
 
     def mark_attendance(self, name, confidence=None):
         """
-        Auto-alternating IN/OUT attendance.
-        - First scan of the day  → IN
-        - After cooldown, next   → OUT
-        - After cooldown, next   → IN  ...
+        Strictly IN attendance (Unlock-only).
+        - Respects the cooldown timer to prevent spamming.
+        - Always records direction as 'IN'.
 
         Returns: (was_marked: bool, direction: str or None)
         """
@@ -64,9 +63,9 @@ class AttendanceDB:
         today = now.strftime("%Y-%m-%d")
         current_time = now.strftime("%H:%M:%S")
 
-        # Get the most recent record for this person today
+        # Get the most recent record for this person today to check cooldown
         last = conn.execute(
-            "SELECT time_in, direction FROM attendance "
+            "SELECT time_in FROM attendance "
             "WHERE name = ? AND date = ? ORDER BY time_in DESC LIMIT 1",
             (name, today)
         ).fetchone()
@@ -80,11 +79,7 @@ class AttendanceDB:
                 conn.close()
                 return False, None  # Still in cooldown
 
-            # Alternate direction
-            direction = "OUT" if last["direction"] == "IN" else "IN"
-        else:
-            # First scan of the day
-            direction = "IN"
+        direction = "IN"
 
         conn.execute(
             "INSERT INTO attendance (name, date, time_in, direction, confidence) VALUES (?, ?, ?, ?, ?)",
@@ -126,7 +121,7 @@ class AttendanceDB:
         return [dict(row) for row in rows]
 
     def get_stats(self):
-        """Get summary statistics including IN/OUT counts."""
+        """Get summary statistics including IN counts."""
         conn = self._get_conn()
         today = datetime.now().strftime("%Y-%m-%d")
 
@@ -137,11 +132,6 @@ class AttendanceDB:
 
         today_in = conn.execute(
             "SELECT COUNT(*) as cnt FROM attendance WHERE date = ? AND direction = 'IN'",
-            (today,)
-        ).fetchone()["cnt"]
-
-        today_out = conn.execute(
-            "SELECT COUNT(*) as cnt FROM attendance WHERE date = ? AND direction = 'OUT'",
             (today,)
         ).fetchone()["cnt"]
 
@@ -157,7 +147,7 @@ class AttendanceDB:
         return {
             "today_present": today_count,
             "today_in": today_in,
-            "today_out": today_out,
+            "today_out": 0,
             "total_registered": total_registered,
             "total_records": total_records
         }
@@ -182,7 +172,7 @@ class AttendanceDB:
         writer.writerow(["Name", "Date", "Time", "Direction", "Confidence"])
         for row in rows:
             conf = f"{row['confidence']:.2f}" if row["confidence"] else "N/A"
-            writer.writerow([row["name"], row["date"], row["time_in"], row["direction"] or "IN", conf])
+            writer.writerow([row["name"], row["date"], row["time_in"], "IN", conf])
         return output.getvalue()
 
     def register_person(self, name, num_photos):

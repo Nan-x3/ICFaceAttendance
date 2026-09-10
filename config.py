@@ -22,7 +22,7 @@ FRAME_RATE = 24
 # "hog" = faster, good for RPi CPU  |  "cnn" = more accurate, needs GPU
 FACE_DETECTION_MODEL = "hog"
 # Lower = stricter matching. 0.5 is a good default. Range: 0.3 (very strict) to 0.7 (lenient)
-RECOGNITION_TOLERANCE = 0.5
+RECOGNITION_TOLERANCE = 0.4
 # Process every Nth frame (higher = faster, lower = more responsive)
 FRAME_SKIP = 2
 # Downscale factor for face detection (0.25 = quarter resolution, much faster)
@@ -54,6 +54,7 @@ SECRET_KEY = "face-attendance-secret-change-this-on-pi"
 # ---------------------
 MIN_REGISTRATION_PHOTOS = 3
 MAX_REGISTRATION_PHOTOS = 20
+MAX_FACE_PHOTOS = 50
 
 # ---------------------
 # Motion Detection (Sleep/Wake)
