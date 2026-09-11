@@ -261,7 +261,7 @@ def generate_frames():
                         }
 
                     if (now - qr_unlock_times.get(reg_number, 0) >= 2.0
-                            and send_esp32_command("UNLOCK")):
+                            and send_esp32_command("UNLOCK:" + person_name)):
                         qr_unlock_times[reg_number] = now
                         print("  [Door] Sent UNLOCK command to ESP32.")
                     elif esp32 is None or not esp32.is_open:
@@ -341,7 +341,7 @@ def generate_frames():
                         print(f"  {log_msg}")
                         file_logger.info(log_msg)
 			# Trigger ESP32 Door Unlock
-                        if send_esp32_command("UNLOCK"):
+                        if send_esp32_command("UNLOCK:" + name):
                             print("  [Door] Sent UNLOCK command to ESP32.")
                         else:
                             print("  [Door] ESP32 is not connected; cannot unlock.")

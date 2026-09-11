@@ -61,8 +61,13 @@ String enteredPin;
 void showLocked() {
     display.clearDisplay();
     display.setTextColor(SSD1306_WHITE);
-    display.setTextSize(2);
-    display.setCursor(28, 24);
+    display.drawRoundRect(47, 28, 34, 27, 5, SSD1306_WHITE);
+    display.drawRoundRect(54, 12, 20, 27, 9, SSD1306_WHITE);
+    display.fillRect(59, 25, 10, 14, SSD1306_BLACK);
+    display.fillCircle(64, 39, 3, SSD1306_WHITE);
+    display.drawLine(64, 39, 64, 47, SSD1306_WHITE);
+    display.setTextSize(1);
+    display.setCursor(43, 57);
     display.println("LOCKED");
     display.display();
 }
@@ -102,18 +107,24 @@ void showBooting() {
 }
 
 void showAccessGranted(String name) {
-    display.clearDisplay();
-    display.setTextColor(SSD1306_WHITE);
-    display.setTextSize(2);
-    display.setCursor(18, 4);
-    display.println("ENTER!");
-    display.setTextSize(1);
-    display.setCursor(10, 28);
-    display.println(name.substring(0, min(name.length(), static_cast<unsigned int>(18))));
-    display.setTextSize(2);
-    display.setCursor(48, 44);
-    display.println("OK");
-    display.display();
+    int separator = name.indexOf(' ');
+    String firstName = separator > 0 ? name.substring(0, separator) : name;
+    firstName.trim();
+    firstName = firstName.substring(0, min(firstName.length(), static_cast<unsigned int>(12)));
+
+    for (int frame = 0; frame < 3; frame++) {
+        display.clearDisplay();
+        display.setTextColor(SSD1306_WHITE);
+        display.drawCircle(64, 27, 20 + frame * 3, SSD1306_WHITE);
+        display.drawLine(53, 27, 61, 35, SSD1306_WHITE);
+        display.drawLine(61, 35, 76, 18, SSD1306_WHITE);
+        display.setTextSize(1);
+        int textX = (DisplayConfig::Width - static_cast<int>(firstName.length()) * 6) / 2;
+        display.setCursor(max(textX, 0), 52);
+        display.println(firstName);
+        display.display();
+        delay(120);
+    }
 }
 
 void showWrongPin() {
@@ -203,6 +214,10 @@ void handleSerialCommand(String command) {
 
     if (command == "UNLOCK") {
         unlockDoor("Face ID", "Pi command");
+    } else if (command.startsWith("UNLOCK:")) {
+        String name = command.substring(7);
+        name.trim();
+        unlockDoor(name.length() > 0 ? name : "Face ID", "Pi command");
     } else if (command.startsWith("ADD:")) {
         int separator = command.indexOf(':', 4);
         if (separator > 0) {

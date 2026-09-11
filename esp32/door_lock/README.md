@@ -38,6 +38,7 @@ WiFi, ArduinoOTA, SPIFFS, Wire, and SPI are provided by the ESP32 Arduino core.
 The Pi sends newline-terminated commands:
 
 - `UNLOCK`: unlocks the relay for 10 seconds.
+- `UNLOCK:<name>`: unlocks the relay and shows the person's first name.
 - `ADD:<pin>:<name>`: adds a keypad credential.
 - `REMOVE:<pin>`: removes a keypad credential.
 - `LIST`: prints all keypad credentials.
