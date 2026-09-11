@@ -13,6 +13,7 @@
 
 namespace Pins {
 constexpr uint8_t Relay = 18;
+constexpr uint8_t ExitButton = 19;
 byte KeypadRows[] = {13, 12, 14, 27};
 byte KeypadColumns[] = {26, 25, 33, 32};
 }
@@ -25,10 +26,14 @@ constexpr uint8_t Address = 0x3C;
 }
 
 constexpr unsigned long UnlockDurationMs = 10000;
+constexpr unsigned long ButtonDebounceMs = 50;
 constexpr unsigned long FirmwareCheckIntervalMs = 10UL * 60UL * 1000UL;
 const char* FirmwareVersion = "0.1.0";
 const char* GuestFile = "/guests.json";
 unsigned long lastFirmwareCheck = 0;
+unsigned long lastButtonChange = 0;
+bool lastButtonState = HIGH;
+bool buttonArmed = true;
 
 Adafruit_SSD1306 display(
     DisplayConfig::Width,
@@ -280,6 +285,7 @@ void checkForPiFirmwareUpdate() {
 void setup() {
     pinMode(Pins::Relay, OUTPUT);
     digitalWrite(Pins::Relay, HIGH);
+    pinMode(Pins::ExitButton, INPUT_PULLUP);
     Serial.begin(9600);
 
     if (!display.begin(SSD1306_SWITCHCAPVCC, DisplayConfig::Address)) {
@@ -326,6 +332,23 @@ void loop() {
     }
 
     char key = keypad.getKey();
+    bool buttonState = digitalRead(Pins::ExitButton);
+    if (buttonState != lastButtonState) {
+        lastButtonChange = millis();
+        lastButtonState = buttonState;
+    }
+
+    if (buttonState == HIGH && millis() - lastButtonChange >= ButtonDebounceMs) {
+        buttonArmed = true;
+    }
+
+    if (buttonState == LOW && buttonArmed &&
+        millis() - lastButtonChange >= ButtonDebounceMs) {
+        unlockDoor("Exit Button", "GPIO 19");
+        buttonArmed = false;
+        lastButtonChange = millis();
+    }
+
     if (!key) return;
 
     if (key == '#') {

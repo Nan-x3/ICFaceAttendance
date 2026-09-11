@@ -22,6 +22,9 @@ Only QR values listed in `users_directory.json` can unlock the door. Unknown QR 
 
 The unused `live_tuner.py` and `tracker.py` modules were removed.
 
+The ESP32 firmware also supports an exit/contact button on GPIO 19. Wire the
+dry contact between GPIO 19 and GND; the firmware uses the internal pull-up.
+
 ## Install On A New Raspberry Pi
 
 1. Open Terminal on the Pi, or connect over SSH.

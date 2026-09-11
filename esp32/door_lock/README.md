@@ -4,6 +4,7 @@ This folder contains the cleaned firmware source for the ESP32 door controller.
 It preserves the current wiring and behavior:
 
 - Relay: GPIO 18, active LOW, unlocked for 10 seconds.
+- Exit/contact button: GPIO 19 to GND, using the internal pull-up.
 - Keypad rows: GPIO 13, 12, 14, 27.
 - Keypad columns: GPIO 26, 25, 33, 32.
 - OLED: I2C address `0x3C`, 128x64.
@@ -40,6 +41,14 @@ The Pi sends newline-terminated commands:
 - `ADD:<pin>:<name>`: adds a keypad credential.
 - `REMOVE:<pin>`: removes a keypad credential.
 - `LIST`: prints all keypad credentials.
+
+## Exit Contact Wiring
+
+For the SIBASS ZB2-BE101 dry contact, connect one contact terminal to ESP32
+`GND` and the other contact terminal to GPIO `19`. The firmware configures GPIO
+19 as `INPUT_PULLUP`: it reads HIGH while open and LOW when the contact closes.
+Do not connect an external voltage to this contact input. One press unlocks the
+relay for 10 seconds; the contact must release before another press is accepted.
 
 ## OTA
 
