@@ -5,6 +5,8 @@
 #include <Adafruit_SSD1306.h>
 #include <WiFi.h>
 #include <ArduinoOTA.h>
+#include <HTTPClient.h>
+#include <HTTPUpdate.h>
 #include <SPIFFS.h>
 #include <ArduinoJson.h>
 #include "secrets.h"
@@ -23,7 +25,10 @@ constexpr uint8_t Address = 0x3C;
 }
 
 constexpr unsigned long UnlockDurationMs = 10000;
+constexpr unsigned long FirmwareCheckIntervalMs = 10UL * 60UL * 1000UL;
+const char* FirmwareVersion = "0.1.0";
 const char* GuestFile = "/guests.json";
+unsigned long lastFirmwareCheck = 0;
 
 Adafruit_SSD1306 display(
     DisplayConfig::Width,
@@ -218,6 +223,60 @@ void configureOta() {
     ArduinoOTA.begin();
 }
 
+bool isNewerVersion(const String& remoteVersion) {
+    int currentMajor = 0;
+    int currentMinor = 0;
+    int currentPatch = 0;
+    int remoteMajor = 0;
+    int remoteMinor = 0;
+    int remotePatch = 0;
+
+    if (sscanf(FirmwareVersion, "%d.%d.%d", &currentMajor, &currentMinor,
+               &currentPatch) != 3 ||
+        sscanf(remoteVersion.c_str(), "%d.%d.%d", &remoteMajor, &remoteMinor,
+               &remotePatch) != 3) {
+        return false;
+    }
+
+    if (remoteMajor != currentMajor) return remoteMajor > currentMajor;
+    if (remoteMinor != currentMinor) return remoteMinor > currentMinor;
+    return remotePatch > currentPatch;
+}
+
+void checkForPiFirmwareUpdate() {
+    if (WiFi.status() != WL_CONNECTED ||
+        String(PI_UPDATE_TOKEN) == "CHANGE_THIS_PI_UPDATE_TOKEN") {
+        return;
+    }
+
+    WiFiClient client;
+    HTTPClient http;
+    String versionUrl = String(PI_VERSION_URL) + "?token=" + PI_UPDATE_TOKEN;
+    if (!http.begin(client, versionUrl)) return;
+
+    int responseCode = http.GET();
+    if (responseCode != HTTP_CODE_OK) {
+        http.end();
+        return;
+    }
+
+    StaticJsonDocument<256> document;
+    DeserializationError error = deserializeJson(document, http.getString());
+    http.end();
+    if (error || !document.containsKey("version")) return;
+
+    String remoteVersion = document["version"].as<String>();
+    if (!isNewerVersion(remoteVersion)) return;
+
+    Serial.println("Firmware update available: " + remoteVersion);
+    HTTPUpdate httpUpdate;
+    String firmwareUrl = String(PI_FIRMWARE_URL) + "?token=" + PI_UPDATE_TOKEN;
+    t_http_codes updateResult = httpUpdate.update(client, firmwareUrl, FirmwareVersion);
+    if (updateResult != HTTP_CODE_OK) {
+        Serial.println("Firmware update failed: " + String(updateResult));
+    }
+}
+
 void setup() {
     pinMode(Pins::Relay, OUTPUT);
     digitalWrite(Pins::Relay, HIGH);
@@ -243,6 +302,8 @@ void setup() {
     if (WiFi.status() == WL_CONNECTED) {
         Serial.println("WiFi: " + WiFi.localIP().toString());
         configureOta();
+        checkForPiFirmwareUpdate();
+        lastFirmwareCheck = millis();
     } else {
         Serial.println("WiFi: offline (PIN and serial only)");
     }
@@ -254,6 +315,10 @@ void setup() {
 void loop() {
     if (WiFi.status() == WL_CONNECTED) {
         ArduinoOTA.handle();
+        if (millis() - lastFirmwareCheck >= FirmwareCheckIntervalMs) {
+            checkForPiFirmwareUpdate();
+            lastFirmwareCheck = millis();
+        }
     }
 
     if (Serial.available()) {

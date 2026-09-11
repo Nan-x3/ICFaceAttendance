@@ -34,6 +34,9 @@ FACE_DETECTION_SCALE = 0.25
 KNOWN_FACES_DIR = os.path.join(BASE_DIR, "known_faces")
 ENCODINGS_FILE = os.path.join(BASE_DIR, "encodings", "encodings.pkl")
 DATABASE_PATH = os.path.join(BASE_DIR, "data", "attendance.db")
+ESP32_FIRMWARE_VERSION = "0.1.0"
+ESP32_FIRMWARE_FILE = os.path.join(BASE_DIR, "data", "esp32", "door_lock.bin")
+ESP32_UPDATE_TOKEN = os.environ.get("ESP32_UPDATE_TOKEN", "")
 
 # ---------------------
 # Attendance Rules

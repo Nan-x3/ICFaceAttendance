@@ -95,10 +95,24 @@ Wi-Fi, Arduino IDE can upload later firmware versions over OTA:
 5. Select the ESP32 network port under Arduino IDE's **Tools > Port** menu.
 6. Upload and enter the OTA password when asked.
 
-The ESP32 does **not** automatically pull new firmware from the Pi yet. The Pi
-currently controls the running ESP32 over USB serial, while Arduino IDE pushes
-firmware over Wi-Fi. A Pi-hosted automatic firmware-download system would be a
-separate future feature.
+### Pi-hosted automatic updates
+
+The ESP32 can now check the Pi for a newer firmware build at boot and every 10
+minutes. The Pi serves the binary only when the shared update token is correct.
+
+To enable it:
+
+1. Set an environment variable on the Pi before starting Flask:
+	`export ESP32_UPDATE_TOKEN="choose-a-long-private-token"`.
+2. Put the compiled firmware at `data/esp32/door_lock.bin`.
+3. Set the same token as `PI_UPDATE_TOKEN` in the ESP32's local `secrets.h`.
+4. Increase `FirmwareVersion` in `esp32/door_lock/door_lock.ino`, for example from `0.1.0` to `0.2.0`.
+5. Upload that new firmware once through Arduino IDE OTA or USB.
+6. Restart Flask after placing the binary. The ESP32 will download a newer binary on its next check and reboot into it.
+
+The Pi does not compile Arduino firmware by itself yet. Arduino IDE or a
+PlatformIO build must produce `door_lock.bin`. Arduino IDE OTA remains the
+recovery path if a Pi-hosted update fails.
 
 ## Website Pages
 

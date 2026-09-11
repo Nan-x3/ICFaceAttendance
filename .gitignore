@@ -36,3 +36,6 @@ desktop.ini
 
 # ESP32 local credentials
 esp32/**/secrets.h
+
+# Pi-hosted ESP32 firmware build output
+data/esp32/*.bin

@@ -26,7 +26,8 @@ from flask import (
 from config import (
     FLASK_HOST, FLASK_PORT, SECRET_KEY, CAMERA_SOURCE,
     CAMERA_RESOLUTION, FRAME_RATE, FRAME_SKIP, SCAN_COOLDOWN_SECONDS,
-    SLEEP_AFTER_SECONDS, MOTION_THRESHOLD, KNOWN_FACES_DIR, MAX_FACE_PHOTOS
+    SLEEP_AFTER_SECONDS, MOTION_THRESHOLD, KNOWN_FACES_DIR, MAX_FACE_PHOTOS,
+    ESP32_FIRMWARE_VERSION, ESP32_FIRMWARE_FILE, ESP32_UPDATE_TOKEN
 )
 from recognition_engine import FaceRecognitionEngine
 from attendance import AttendanceDB
@@ -413,6 +414,28 @@ def video_feed():
     """MJPEG live camera stream."""
     return Response(generate_frames(),
                     mimetype='multipart/x-mixed-replace; boundary=frame')
+
+
+def firmware_request_is_authorized():
+    """Require the shared token for ESP32 firmware requests."""
+    return bool(ESP32_UPDATE_TOKEN) and request.args.get("token") == ESP32_UPDATE_TOKEN
+
+
+@app.route('/api/esp32/firmware/version')
+def esp32_firmware_version():
+    if not firmware_request_is_authorized():
+        return jsonify({"error": "Unauthorized"}), 401
+    return jsonify({"version": ESP32_FIRMWARE_VERSION})
+
+
+@app.route('/api/esp32/firmware.bin')
+def esp32_firmware_binary():
+    if not firmware_request_is_authorized():
+        return jsonify({"error": "Unauthorized"}), 401
+    if not os.path.isfile(ESP32_FIRMWARE_FILE):
+        return jsonify({"error": "Firmware file is not installed on the Pi"}), 404
+    return send_file(ESP32_FIRMWARE_FILE, mimetype='application/octet-stream',
+                     as_attachment=False, download_name='door_lock.bin')
 
 
 # ── Registration ─────────────────────────────────────────────────────────────
