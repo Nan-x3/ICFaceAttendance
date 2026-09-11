@@ -51,7 +51,9 @@ jobs:
             --fqbn esp32:esp32:esp32 \
             --output-dir build \
             esp32/door_lock/door_lock.ino
-          cp esp32/door_lock/build/door_lock.ino.bin door_lock.bin
+          firmware_bin="$(find esp32/door_lock/build -type f -name '*.bin' -print -quit)"
+          test -n "$firmware_bin"
+          cp "$firmware_bin" door_lock.bin
           printf '%s\n' "$FIRMWARE_VERSION" > firmware-version.txt
 
       - name: Publish latest firmware
