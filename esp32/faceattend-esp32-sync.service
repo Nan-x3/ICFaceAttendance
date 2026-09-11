@@ -1,0 +1,10 @@
+[Unit]
+Description=Sync ESP32 firmware from GitHub
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=__FACEATTEND_USER__
+WorkingDirectory=__PROJECT_DIR__
+ExecStart=__PROJECT_DIR__/esp32/sync_firmware_from_github.sh

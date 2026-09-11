@@ -102,19 +102,20 @@ Wi-Fi, Arduino IDE can upload later firmware versions over OTA:
 
 The ESP32 can now check the Pi for a newer firmware build at boot and every 10
 minutes. The Pi serves the binary only when the shared update token is correct.
+GitHub Actions builds the binary on every firmware-related push, and the Pi's
+sync timer downloads the latest published binary every five minutes.
 
 To enable it:
 
 1. Create `data/esp32/update_token` on the Pi. The application reads this ignored local file automatically.
-2. Put the compiled firmware at `data/esp32/door_lock.bin`.
+2. Run `sudo systemctl enable --now faceattend-esp32-sync.timer` on the Pi.
 3. Set the same token as `PI_UPDATE_TOKEN` in the ESP32's local `secrets.h`.
-4. Increase `FirmwareVersion` in `esp32/door_lock/door_lock.ino`, for example from `0.1.0` to `0.2.0`.
-5. Upload that new firmware once through Arduino IDE OTA or USB.
-6. Restart Flask after placing the binary. The ESP32 will download a newer binary on its next check and reboot into it.
+4. Push a firmware change to `main`. GitHub Actions builds and publishes `door_lock.bin`.
+5. The Pi downloads the release automatically within five minutes.
+6. The ESP32 downloads the newer binary on its next ten-minute check and reboots into it.
 
-The Pi does not compile Arduino firmware by itself yet. Arduino IDE or a
-PlatformIO build must produce `door_lock.bin`. Arduino IDE OTA remains the
-recovery path if a Pi-hosted update fails.
+The Pi does not compile Arduino firmware. GitHub Actions does the build.
+Arduino IDE OTA remains the recovery path if a Pi-hosted update fails.
 
 ## Website Pages
 

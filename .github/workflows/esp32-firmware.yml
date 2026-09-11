@@ -1,0 +1,67 @@
+name: Build ESP32 firmware
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "esp32/door_lock/**"
+      - ".github/workflows/esp32-firmware.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  FIRMWARE_VERSION: "0.1.${{ github.run_number }}"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Arduino CLI
+        uses: arduino/setup-arduino-cli@v2
+
+      - name: Set up ESP32 core
+        run: |
+          arduino-cli config init
+          arduino-cli config add board_manager.additional_urls \
+            https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json
+          arduino-cli core update-index
+          arduino-cli core install esp32:esp32
+
+      - name: Install libraries
+        run: |
+          arduino-cli lib install Keypad
+          arduino-cli lib install "Adafruit GFX Library"
+          arduino-cli lib install "Adafruit SSD1306"
+          arduino-cli lib install ArduinoJson
+
+      - name: Prepare build secrets
+        working-directory: esp32/door_lock
+        run: cp secrets.example.h secrets.h
+
+      - name: Compile firmware
+        run: |
+          arduino-cli compile \
+            --fqbn esp32:esp32:esp32 \
+            --build-property "compiler.cpp.extra_flags=-DFIRMWARE_VERSION=\\\"$FIRMWARE_VERSION\\\"" \
+            --output-dir build \
+            esp32/door_lock/door_lock.ino
+          cp esp32/door_lock/build/door_lock.ino.bin door_lock.bin
+          printf '%s\n' "$FIRMWARE_VERSION" > firmware-version.txt
+
+      - name: Publish latest firmware
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: firmware-latest
+          target_commitish: main
+          name: Latest ESP32 firmware
+          prerelease: true
+          make_latest: false
+          files: |
+            door_lock.bin
+            firmware-version.txt
+          overwrite_files: true

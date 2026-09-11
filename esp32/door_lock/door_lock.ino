@@ -28,7 +28,10 @@ constexpr uint8_t Address = 0x3C;
 constexpr unsigned long UnlockDurationMs = 10000;
 constexpr unsigned long ButtonDebounceMs = 50;
 constexpr unsigned long FirmwareCheckIntervalMs = 10UL * 60UL * 1000UL;
-const char* FirmwareVersion = "0.1.0";
+#ifndef FIRMWARE_VERSION
+#define FIRMWARE_VERSION "0.1.0"
+#endif
+const char* FirmwareVersion = FIRMWARE_VERSION;
 const char* GuestFile = "/guests.json";
 unsigned long lastFirmwareCheck = 0;
 unsigned long lastButtonChange = 0;

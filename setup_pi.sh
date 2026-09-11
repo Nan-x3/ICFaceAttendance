@@ -105,6 +105,15 @@ EOF
 
     sudo systemctl daemon-reload
     sudo systemctl enable face-attendance.service
+    sed -e "s|__FACEATTEND_USER__|$USER|g" \
+        -e "s|__PROJECT_DIR__|$SCRIPT_DIR|g" \
+        "$SCRIPT_DIR/esp32/faceattend-esp32-sync.service" \
+        | sudo tee /etc/systemd/system/faceattend-esp32-sync.service > /dev/null
+    sudo cp "$SCRIPT_DIR/esp32/faceattend-esp32-sync.timer" \
+        /etc/systemd/system/faceattend-esp32-sync.timer
+    sudo systemctl daemon-reload
+    sudo systemctl enable --now faceattend-esp32-sync.timer
     echo "✅ Service created! It will auto-start on boot."
     echo "   Manual control: sudo systemctl start|stop|status face-attendance"
+    echo "   Firmware sync: sudo systemctl start faceattend-esp32-sync.service"
 fi

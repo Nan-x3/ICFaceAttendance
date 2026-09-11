@@ -40,3 +40,4 @@ esp32/**/secrets.h
 # Pi-hosted ESP32 firmware build output
 data/esp32/*.bin
 data/esp32/update_token
+data/esp32/firmware-version.txt
