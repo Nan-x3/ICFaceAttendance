@@ -76,6 +76,30 @@ Stop `app.py` first because only one program can use the serial port. Then run `
 
 The tool can add students, add PIN users, remove users, list users, and test the lock. Its default port is `/dev/ttyUSB0`. Find ports with `ls /dev/ttyUSB* /dev/ttyACM*`. The ESP32 firmware must understand `UNLOCK` followed by a newline.
 
+## ESP32 Firmware Handoff
+
+The ESP32 source is in `esp32/door_lock/`:
+
+- `door_lock.ino`: firmware source.
+- `secrets.example.h`: safe template for local Wi-Fi and OTA settings.
+- `README.md`: wiring, library, USB upload, and OTA instructions.
+- `secrets.h`: real local credentials; ignored by Git and never uploaded.
+
+The first firmware upload must be done over USB. After the ESP32 connects to
+Wi-Fi, Arduino IDE can upload later firmware versions over OTA:
+
+1. Copy `secrets.example.h` to `secrets.h` beside `door_lock.ino`.
+2. Fill in the Wi-Fi name, Wi-Fi password, and OTA password.
+3. Upload once over USB and confirm `IC DoorLock Ready` in Serial Monitor at 9600 baud.
+4. Connect the computer and ESP32 to the same Wi-Fi network.
+5. Select the ESP32 network port under Arduino IDE's **Tools > Port** menu.
+6. Upload and enter the OTA password when asked.
+
+The ESP32 does **not** automatically pull new firmware from the Pi yet. The Pi
+currently controls the running ESP32 over USB serial, while Arduino IDE pushes
+firmware over Wi-Fi. A Pi-hosted automatic firmware-download system would be a
+separate future feature.
+
 ## Website Pages
 
 - `/`: Dashboard with live feed, totals, and recent events.
