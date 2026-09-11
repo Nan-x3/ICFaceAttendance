@@ -53,6 +53,7 @@ engine = FaceRecognitionEngine()
 
 camera = None
 camera_lock = threading.Lock()
+esp32_lock = threading.Lock()
 latest_results = []          # Most recent recognition results
 latest_qr_id = None          # Most recently decoded QR value
 latest_qr_seen_at = 0.0      # Timestamp of the most recent QR decode
@@ -84,6 +85,32 @@ def init_esp32():
 esp32 = init_esp32()
 if not esp32:
     print("Warning: Could not detect or connect to ESP32 on any port.")
+
+
+def send_esp32_command(command):
+    """Send a command, reconnecting if the ESP32 rebooted or USB reset."""
+    global esp32
+
+    with esp32_lock:
+        for attempt in range(2):
+            try:
+                if esp32 is None or not esp32.is_open:
+                    esp32 = init_esp32()
+                if esp32 is None or not esp32.is_open:
+                    return False
+
+                esp32.write((command + "\n").encode())
+                return True
+            except (serial.SerialException, OSError) as error:
+                print(f"[Serial] ESP32 write failed: {error}")
+                try:
+                    esp32.close()
+                except Exception:
+                    pass
+                esp32 = None
+
+        print("[Serial] ESP32 is unavailable after reconnect attempt.")
+        return False
 
 # ── Camera Helpers ───────────────────────────────────────────────────────────
 def get_camera():
@@ -233,12 +260,11 @@ def generate_frames():
                             "expire": now + 3.0
                         }
 
-                    if (esp32 and esp32.is_open
-                            and now - qr_unlock_times.get(reg_number, 0) >= 2.0):
-                        esp32.write(b"UNLOCK\n")
+                    if (now - qr_unlock_times.get(reg_number, 0) >= 2.0
+                            and send_esp32_command("UNLOCK")):
                         qr_unlock_times[reg_number] = now
                         print("  [Door] Sent UNLOCK command to ESP32.")
-                    elif not esp32 or not esp32.is_open:
+                    elif esp32 is None or not esp32.is_open:
                         print("  [Door] ESP32 is not connected; cannot unlock.")
 
                     if polygon:
@@ -315,9 +341,10 @@ def generate_frames():
                         print(f"  {log_msg}")
                         file_logger.info(log_msg)
 			# Trigger ESP32 Door Unlock
-                        if esp32 and esp32.is_open:
-                            esp32.write(b'UNLOCK\n')
+                        if send_esp32_command("UNLOCK"):
                             print("  [Door] Sent UNLOCK command to ESP32.")
+                        else:
+                            print("  [Door] ESP32 is not connected; cannot unlock.")
 
                         # Add only high-confidence, confirmed matches to the training set.
                         if confidence > 0.58:
