@@ -6,15 +6,16 @@ RELEASE_TAG="firmware-latest"
 PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 TARGET_DIR="$PROJECT_DIR/data/esp32"
 BASE_URL="https://github.com/$REPO/releases/download/$RELEASE_TAG"
+CACHE_BUSTER="?cache_bust=$(date +%s)"
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT
 
 mkdir -p "$TARGET_DIR"
 curl --fail --location --silent --show-error \
-    "$BASE_URL/door_lock.bin" \
+    "$BASE_URL/door_lock.bin$CACHE_BUSTER" \
     --output "$TMP_DIR/door_lock.bin"
 curl --fail --location --silent --show-error \
-    "$BASE_URL/firmware-version.txt" \
+    "$BASE_URL/firmware-version.txt$CACHE_BUSTER" \
     --output "$TMP_DIR/firmware-version.txt"
 
 test -s "$TMP_DIR/door_lock.bin"
