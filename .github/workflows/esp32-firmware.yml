@@ -51,7 +51,10 @@ jobs:
             --fqbn esp32:esp32:esp32 \
             --output-dir build \
             esp32/door_lock/door_lock.ino
-          firmware_bin="$(find esp32/door_lock/build -type f -name '*.bin' -print -quit)"
+          firmware_bin="$(find esp32/door_lock/build -type f -name '*.ino.bin' -print -quit)"
+          if [ -z "$firmware_bin" ]; then
+            firmware_bin="$(find esp32/door_lock/build -type f -name '*.bin' -printf '%s %p\n' | sort -nr | awk 'NR == 1 {print $2}')"
+          fi
           test -n "$firmware_bin"
           cp "$firmware_bin" door_lock.bin
           printf '%s\n' "$FIRMWARE_VERSION" > firmware-version.txt
