@@ -271,8 +271,8 @@ void checkForPiFirmwareUpdate() {
     Serial.println("Firmware update available: " + remoteVersion);
     HTTPUpdate httpUpdate;
     String firmwareUrl = String(PI_FIRMWARE_URL) + "?token=" + PI_UPDATE_TOKEN;
-    t_http_codes updateResult = httpUpdate.update(client, firmwareUrl, FirmwareVersion);
-    if (updateResult != HTTP_CODE_OK) {
+    HTTPUpdateResult updateResult = httpUpdate.update(client, firmwareUrl, FirmwareVersion);
+    if (updateResult != HTTP_UPDATE_OK && updateResult != HTTP_UPDATE_NO_UPDATES) {
         Serial.println("Firmware update failed: " + String(updateResult));
     }
 }
