@@ -45,9 +45,10 @@ jobs:
 
       - name: Compile firmware
         run: |
+          sed -i "s/#define FIRMWARE_VERSION \"0.1.0\"/#define FIRMWARE_VERSION \"$FIRMWARE_VERSION\"/" \
+            esp32/door_lock/door_lock.ino
           arduino-cli compile \
             --fqbn esp32:esp32:esp32 \
-            --build-property "compiler.cpp.extra_flags=-DFIRMWARE_VERSION=\\\"$FIRMWARE_VERSION\\\"" \
             --output-dir build \
             esp32/door_lock/door_lock.ino
           cp esp32/door_lock/build/door_lock.ino.bin door_lock.bin
