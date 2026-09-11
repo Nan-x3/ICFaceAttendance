@@ -102,8 +102,7 @@ minutes. The Pi serves the binary only when the shared update token is correct.
 
 To enable it:
 
-1. Set an environment variable on the Pi before starting Flask:
-	`export ESP32_UPDATE_TOKEN="choose-a-long-private-token"`.
+1. Create `data/esp32/update_token` on the Pi. The application reads this ignored local file automatically.
 2. Put the compiled firmware at `data/esp32/door_lock.bin`.
 3. Set the same token as `PI_UPDATE_TOKEN` in the ESP32's local `secrets.h`.
 4. Increase `FirmwareVersion` in `esp32/door_lock/door_lock.ino`, for example from `0.1.0` to `0.2.0`.

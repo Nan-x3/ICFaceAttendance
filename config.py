@@ -36,7 +36,11 @@ ENCODINGS_FILE = os.path.join(BASE_DIR, "encodings", "encodings.pkl")
 DATABASE_PATH = os.path.join(BASE_DIR, "data", "attendance.db")
 ESP32_FIRMWARE_VERSION = "0.1.0"
 ESP32_FIRMWARE_FILE = os.path.join(BASE_DIR, "data", "esp32", "door_lock.bin")
+ESP32_UPDATE_TOKEN_FILE = os.path.join(BASE_DIR, "data", "esp32", "update_token")
 ESP32_UPDATE_TOKEN = os.environ.get("ESP32_UPDATE_TOKEN", "")
+if not ESP32_UPDATE_TOKEN and os.path.isfile(ESP32_UPDATE_TOKEN_FILE):
+	with open(ESP32_UPDATE_TOKEN_FILE, "r", encoding="utf-8") as token_file:
+		ESP32_UPDATE_TOKEN = token_file.read().strip()
 
 # ---------------------
 # Attendance Rules

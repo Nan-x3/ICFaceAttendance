@@ -49,8 +49,9 @@ network port and upload the next firmware version wirelessly.
 
 The current repository does not yet host a compiled firmware endpoint. The next
 step is to build `door_lock.bin` and place it on the Pi at
-`data/esp32/door_lock.bin`. Set `ESP32_UPDATE_TOKEN` in the Pi environment and
-set the same value as `PI_UPDATE_TOKEN` in local `secrets.h`. Then increase
+`data/esp32/door_lock.bin`. Put the shared token in the Pi's ignored local file
+`data/esp32/update_token` and set the same value as `PI_UPDATE_TOKEN` in local
+`secrets.h`. Then increase
 `FirmwareVersion` before uploading the new firmware once over Arduino IDE OTA
 or USB. The ESP32 checks the Pi at boot and every ten minutes.
 
