@@ -18,6 +18,7 @@ Only QR values listed in `users_directory.json` can unlock the door. Unknown QR 
 - `templates/` and `static/`: Website pages, CSS, and JavaScript.
 - `users_directory.json`: QR text mapped to person names.
 - `face_recognition_models`: Git submodule containing recognition models.
+- `esp32/door_lock/`: cleaned ESP32 firmware source, wiring notes, and OTA instructions.
 
 The unused `live_tuner.py` and `tracker.py` modules were removed.
 

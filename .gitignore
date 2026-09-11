@@ -33,3 +33,6 @@ desktop.ini
 
 # Logs
 *.log
+
+# ESP32 local credentials
+esp32/**/secrets.h
