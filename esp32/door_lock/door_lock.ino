@@ -292,37 +292,76 @@ bool isNewerVersion(const String& remoteVersion) {
     return remotePatch > currentPatch;
 }
 
+bool fetchTextFromUrl(const String& url, String& responseText) {
+    WiFiClient client;
+    HTTPClient http;
+    if (!http.begin(client, url)) {
+        return false;
+    }
+
+    int responseCode = http.GET();
+    if (responseCode != HTTP_CODE_OK) {
+        http.end();
+        return false;
+    }
+
+    responseText = http.getString();
+    http.end();
+    responseText.trim();
+    return !responseText.isEmpty();
+}
+
+bool checkForFirmwareUpdateFromSource(const String& sourceName,
+                                     const String& versionUrl,
+                                     const String& firmwareUrl,
+                                     const String& authSuffix) {
+    String remoteVersion;
+    String versionEndpoint = versionUrl + authSuffix;
+    if (!fetchTextFromUrl(versionEndpoint, remoteVersion)) {
+        return false;
+    }
+
+    if (!isNewerVersion(remoteVersion)) {
+        return false;
+    }
+
+    Serial.println("Firmware update available from " + sourceName + ": " + remoteVersion);
+    HTTPUpdate httpUpdate;
+    WiFiClient updateClient;
+    String firmwareEndpoint = firmwareUrl + authSuffix;
+    HTTPUpdateResult updateResult = httpUpdate.update(updateClient, firmwareEndpoint, FirmwareVersion);
+    if (updateResult != HTTP_UPDATE_OK && updateResult != HTTP_UPDATE_NO_UPDATES) {
+        Serial.println("Firmware update failed from " + sourceName + ": " + String(updateResult));
+        return false;
+    }
+
+    return true;
+}
+
 void checkForPiFirmwareUpdate() {
     if (WiFi.status() != WL_CONNECTED ||
         String(PI_UPDATE_TOKEN) == "CHANGE_THIS_PI_UPDATE_TOKEN") {
         return;
     }
 
-    WiFiClient client;
-    HTTPClient http;
-    String versionUrl = String(PI_VERSION_URL) + "?token=" + PI_UPDATE_TOKEN;
-    if (!http.begin(client, versionUrl)) return;
+    String authSuffix = "?token=" + String(PI_UPDATE_TOKEN);
+    checkForFirmwareUpdateFromSource("Pi", String(PI_VERSION_URL), String(PI_FIRMWARE_URL), authSuffix);
+}
 
-    int responseCode = http.GET();
-    if (responseCode != HTTP_CODE_OK) {
-        http.end();
+void checkForGitHubFirmwareUpdate() {
+    if (WiFi.status() != WL_CONNECTED) {
         return;
     }
 
-    StaticJsonDocument<256> document;
-    DeserializationError error = deserializeJson(document, http.getString());
-    http.end();
-    if (error || !document.containsKey("version")) return;
+    bool updateChecked = checkForFirmwareUpdateFromSource(
+        "GitHub",
+        String(GITHUB_VERSION_URL),
+        String(GITHUB_FIRMWARE_URL),
+        ""
+    );
 
-    String remoteVersion = document["version"].as<String>();
-    if (!isNewerVersion(remoteVersion)) return;
-
-    Serial.println("Firmware update available: " + remoteVersion);
-    HTTPUpdate httpUpdate;
-    String firmwareUrl = String(PI_FIRMWARE_URL) + "?token=" + PI_UPDATE_TOKEN;
-    HTTPUpdateResult updateResult = httpUpdate.update(client, firmwareUrl, FirmwareVersion);
-    if (updateResult != HTTP_UPDATE_OK && updateResult != HTTP_UPDATE_NO_UPDATES) {
-        Serial.println("Firmware update failed: " + String(updateResult));
+    if (!updateChecked) {
+        checkForPiFirmwareUpdate();
     }
 }
 
@@ -352,7 +391,7 @@ void setup() {
     if (WiFi.status() == WL_CONNECTED) {
         Serial.println("WiFi: " + WiFi.localIP().toString());
         configureOta();
-        checkForPiFirmwareUpdate();
+        checkForGitHubFirmwareUpdate();
         lastFirmwareCheck = millis();
     } else {
         Serial.println("WiFi: offline (PIN and serial only)");
@@ -366,7 +405,7 @@ void loop() {
     if (WiFi.status() == WL_CONNECTED) {
         ArduinoOTA.handle();
         if (millis() - lastFirmwareCheck >= FirmwareCheckIntervalMs) {
-            checkForPiFirmwareUpdate();
+            checkForGitHubFirmwareUpdate();
             lastFirmwareCheck = millis();
         }
     }

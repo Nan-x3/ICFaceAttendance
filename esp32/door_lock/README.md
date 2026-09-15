@@ -69,11 +69,13 @@ After the first USB upload, the ESP32 connects to Wi-Fi and starts ArduinoOTA.
 The Pi and ESP32 must be on the same network. In Arduino IDE, select the ESP32
 network port and upload the next firmware version wirelessly.
 
-The current repository does not yet host a compiled firmware endpoint. The next
-step is automated: GitHub Actions builds and publishes `door_lock.bin`, and the
-Pi's `faceattend-esp32-sync.timer` downloads it into `data/esp32/`. Put the
-shared token in the Pi's ignored local file `data/esp32/update_token` and set
-the same value as `PI_UPDATE_TOKEN` in local `secrets.h`. The ESP32 checks the
-Pi at boot and every ten minutes.
+GitHub Actions builds and publishes `door_lock.bin` and `firmware-version.txt`
+for the `firmware-latest` release. The ESP32 checks GitHub first at boot and on
+its configured interval, which avoids a dependency on a running Flask app. The
+Pi endpoint remains as a fallback for local-only deployments or private testing.
+
+Set the repo-specific URLs in local `secrets.h` and keep `PI_UPDATE_TOKEN` only
+if you want the Pi fallback to be active. The default GitHub URLs are already in
+`secrets.example.h`.
 
 Do not change relay behavior until the physical lock wiring has been tested.

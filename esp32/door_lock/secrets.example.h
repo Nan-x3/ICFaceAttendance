@@ -6,6 +6,16 @@
 #define WIFI_PASSWORD "YOUR_WIFI_PASSWORD"
 #define OTA_HOSTNAME "ic-doorlock-esp32"
 #define OTA_PASSWORD "CHANGE_THIS_OTA_PASSWORD"
+
+// Primary update path: direct GitHub release assets. This removes the Flask
+// dependency for firmware updates and works without a running Pi app.
+#define GITHUB_FIRMWARE_URL \
+    "https://github.com/Nan-x3/ICFaceAttendance/releases/download/firmware-latest/door_lock.bin"
+#define GITHUB_VERSION_URL \
+    "https://github.com/Nan-x3/ICFaceAttendance/releases/download/firmware-latest/firmware-version.txt"
+
+// Fallback update path: keep the Pi endpoint for local deployment or offline
+// fallback if GitHub is unreachable.
 #define PI_FIRMWARE_URL "http://ic-doorlock.local:5000/api/esp32/firmware.bin"
 #define PI_VERSION_URL "http://ic-doorlock.local:5000/api/esp32/firmware/version"
 #define PI_UPDATE_TOKEN "CHANGE_THIS_PI_UPDATE_TOKEN"
