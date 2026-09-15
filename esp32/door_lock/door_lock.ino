@@ -381,9 +381,16 @@ void setup() {
         Serial.println("SPIFFS failed");
     }
 
+    WiFi.mode(WIFI_STA);
+    WiFi.setSleep(false);
+    WiFi.setAutoReconnect(true);
+    WiFi.persistent(false);
+    Serial.printf("[WiFi] connecting to SSID: %s\n", WIFI_SSID);
+
     WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
     unsigned int attempts = 0;
-    while (WiFi.status() != WL_CONNECTED && attempts < 20) {
+    while (WiFi.status() != WL_CONNECTED && attempts < 30) {
+        Serial.printf("[WiFi] attempt %u/30 status=%d\n", attempts + 1, WiFi.status());
         delay(500);
         attempts++;
     }
@@ -394,6 +401,7 @@ void setup() {
         checkForGitHubFirmwareUpdate();
         lastFirmwareCheck = millis();
     } else {
+        Serial.printf("[WiFi] failed to connect to %s; final status=%d\n", WIFI_SSID, WiFi.status());
         Serial.println("WiFi: offline (PIN and serial only)");
     }
 
