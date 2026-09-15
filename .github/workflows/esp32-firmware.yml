@@ -12,7 +12,7 @@ permissions:
   contents: write
 
 env:
-  FIRMWARE_VERSION: "0.1.${{ github.run_number }}"
+  FIRMWARE_VERSION: "0.2.${{ github.run_number }}"
 
 jobs:
   build:
@@ -45,7 +45,7 @@ jobs:
 
       - name: Compile firmware
         run: |
-          sed -i "s/#define FIRMWARE_VERSION \"0.1.0\"/#define FIRMWARE_VERSION \"$FIRMWARE_VERSION\"/" \
+          sed -i "s/#define FIRMWARE_VERSION \"0.2.0\"/#define FIRMWARE_VERSION \"$FIRMWARE_VERSION\"/" \
             esp32/door_lock/door_lock.ino
           arduino-cli compile \
             --fqbn esp32:esp32:esp32 \

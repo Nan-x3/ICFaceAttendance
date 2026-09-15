@@ -29,12 +29,14 @@ constexpr unsigned long UnlockDurationMs = 10000;
 constexpr unsigned long ButtonDebounceMs = 50;
 constexpr unsigned long FirmwareCheckIntervalMs = 10UL * 60UL * 1000UL;
 #ifndef FIRMWARE_VERSION
-#define FIRMWARE_VERSION "0.1.0"
+#define FIRMWARE_VERSION "0.2.0"
 #endif
 const char* FirmwareVersion = FIRMWARE_VERSION;
 const char* GuestFile = "/guests.json";
 unsigned long lastFirmwareCheck = 0;
 unsigned long lastButtonChange = 0;
+unsigned long lastIdleFrame = 0;
+uint8_t idleFrame = 0;
 bool lastButtonState = HIGH;
 bool buttonArmed = true;
 
@@ -58,18 +60,30 @@ Keypad keypad = Keypad(makeKeymap(keypadKeys), Pins::KeypadRows,
 
 String enteredPin;
 
-void showLocked() {
+void renderLocked(uint8_t frame) {
     display.clearDisplay();
     display.setTextColor(SSD1306_WHITE);
-    display.drawRoundRect(47, 28, 34, 27, 5, SSD1306_WHITE);
-    display.drawRoundRect(54, 12, 20, 27, 9, SSD1306_WHITE);
+    uint8_t pulse = frame % 8;
+    display.drawRoundRect(47 - pulse / 2, 28 - pulse / 2,
+                          34 + pulse, 27 + pulse, 5, SSD1306_WHITE);
+    display.drawRoundRect(54, 12 - pulse / 2, 20, 27 + pulse, 9, SSD1306_WHITE);
     display.fillRect(59, 25, 10, 14, SSD1306_BLACK);
     display.fillCircle(64, 39, 3, SSD1306_WHITE);
     display.drawLine(64, 39, 64, 47, SSD1306_WHITE);
+    for (uint8_t index = 0; index < 3; index++) {
+        if ((frame + index) % 3 == 0) {
+            display.fillCircle(38 + index * 52, 20, 1, SSD1306_WHITE);
+        }
+    }
     display.setTextSize(1);
     display.setCursor(43, 57);
     display.println("LOCKED");
     display.display();
+}
+
+void showLocked() {
+    idleFrame = 0;
+    renderLocked(idleFrame);
 }
 
 void showTyping() {
@@ -95,15 +109,20 @@ void showTyping() {
 }
 
 void showBooting() {
-    display.clearDisplay();
-    display.setTextColor(SSD1306_WHITE);
-    display.setTextSize(2);
-    display.setCursor(10, 10);
-    display.println("IC LOCK");
-    display.setTextSize(1);
-    display.setCursor(28, 36);
-    display.println("Booting...");
-    display.display();
+    for (uint8_t frame = 0; frame < 5; frame++) {
+        display.clearDisplay();
+        display.setTextColor(SSD1306_WHITE);
+        display.setTextSize(2);
+        display.setCursor(10, 10);
+        display.println("IC LOCK");
+        display.setTextSize(1);
+        display.setCursor(28, 36);
+        display.println("Booting...");
+        display.drawRect(20, 51, 88, 7, SSD1306_WHITE);
+        display.fillRect(22, 53, 17 * (frame + 1), 3, SSD1306_WHITE);
+        display.display();
+        delay(100);
+    }
 }
 
 void showAccessGranted(String name) {
@@ -112,10 +131,13 @@ void showAccessGranted(String name) {
     firstName.trim();
     firstName = firstName.substring(0, min(firstName.length(), static_cast<unsigned int>(12)));
 
-    for (int frame = 0; frame < 3; frame++) {
+    for (int frame = 0; frame < 6; frame++) {
         display.clearDisplay();
         display.setTextColor(SSD1306_WHITE);
-        display.drawCircle(64, 27, 20 + frame * 3, SSD1306_WHITE);
+        display.drawCircle(64, 27, 18 + frame * 4, SSD1306_WHITE);
+        if (frame >= 2) {
+            display.drawCircle(64, 27, 12, SSD1306_WHITE);
+        }
         display.drawLine(53, 27, 61, 35, SSD1306_WHITE);
         display.drawLine(61, 35, 76, 18, SSD1306_WHITE);
         display.setTextSize(1);
@@ -123,23 +145,27 @@ void showAccessGranted(String name) {
         display.setCursor(max(textX, 0), 52);
         display.println(firstName);
         display.display();
-        delay(120);
+        delay(90);
     }
 }
 
 void showWrongPin() {
-    display.clearDisplay();
-    display.fillRect(0, 0, DisplayConfig::Width, DisplayConfig::Height, SSD1306_WHITE);
-    display.setTextColor(SSD1306_BLACK);
-    display.setTextSize(2);
-    display.setCursor(22, 6);
-    display.println("WRONG");
-    display.setCursor(30, 28);
-    display.println("PIN!");
-    display.setTextSize(3);
-    display.setCursor(52, 42);
-    display.println("X");
-    display.display();
+    for (uint8_t frame = 0; frame < 3; frame++) {
+        display.clearDisplay();
+        display.fillRect(0, 0, DisplayConfig::Width, DisplayConfig::Height,
+                         frame % 2 == 0 ? SSD1306_WHITE : SSD1306_BLACK);
+        display.setTextColor(frame % 2 == 0 ? SSD1306_BLACK : SSD1306_WHITE);
+        display.setTextSize(2);
+        display.setCursor(22, 6);
+        display.println("WRONG");
+        display.setCursor(30, 28);
+        display.println("PIN!");
+        display.setTextSize(3);
+        display.setCursor(52, 42);
+        display.println("X");
+        display.display();
+        delay(100);
+    }
 }
 
 bool loadGuests(JsonDocument& document) {
@@ -365,6 +391,12 @@ void loop() {
         unlockDoor("Exit Button", "GPIO 19");
         buttonArmed = false;
         lastButtonChange = millis();
+    }
+
+    if (!enteredPin.length() && millis() - lastIdleFrame >= 180) {
+        lastIdleFrame = millis();
+        idleFrame = (idleFrame + 1) % 8;
+        renderLocked(idleFrame);
     }
 
     if (!key) return;
