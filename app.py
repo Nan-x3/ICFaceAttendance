@@ -39,6 +39,8 @@ app.secret_key = SECRET_KEY
 # ── File Logger ──────────────────────────────────────────────────────────────
 log_dir = os.path.join(os.path.dirname(__file__), 'data')
 os.makedirs(log_dir, exist_ok=True)
+animation_dir = os.path.join(log_dir, 'animations')
+os.makedirs(animation_dir, exist_ok=True)
 log_file = os.path.join(log_dir, 'attendance.log')
 
 file_logger = logging.getLogger('attendance')
@@ -656,6 +658,88 @@ def kiosk_page():
     """Fullscreen kiosk view for Pi monitor — camera feed + recent events."""
     stats = db.get_stats()
     return render_template('kiosk.html', stats=stats)
+
+
+ANIMATION_STATES = ('locked', 'booting', 'typing', 'granted', 'wrong_pin')
+
+
+@app.route('/animations')
+def animations_page():
+    return render_template('animations.html', animation_states=ANIMATION_STATES)
+
+
+@app.route('/api/animations')
+def api_animations():
+    animations = []
+    for filename in sorted(os.listdir(animation_dir)):
+        if not filename.endswith('.json'):
+            continue
+        path = os.path.join(animation_dir, filename)
+        try:
+            with open(path, 'r', encoding='utf-8') as animation_file:
+                animation = json.load(animation_file)
+            animations.append({
+                'name': animation.get('name', filename[:-5]),
+                'state': animation.get('state', 'locked'),
+                'frames': len(animation.get('frames', [])),
+                'fps': animation.get('fps', 8),
+            })
+        except (OSError, json.JSONDecodeError):
+            continue
+    return jsonify(animations)
+
+
+@app.route('/api/animations/<name>')
+def api_animation(name):
+    if not name.endswith('.json'):
+        name = f'{name}.json'
+    safe_name = os.path.basename(name)
+    path = os.path.join(animation_dir, safe_name)
+    if not os.path.isfile(path):
+        return jsonify({'error': 'Animation not found'}), 404
+    try:
+        with open(path, 'r', encoding='utf-8') as animation_file:
+            return jsonify(json.load(animation_file))
+    except (OSError, json.JSONDecodeError):
+        return jsonify({'error': 'Animation file is invalid'}), 500
+
+
+@app.route('/api/animations', methods=['POST'])
+def save_animation():
+    payload = request.get_json(silent=True) or {}
+    name = str(payload.get('name', '')).strip()
+    state = payload.get('state')
+    frames = payload.get('frames')
+    fps = payload.get('fps', 8)
+
+    if not name or not name.replace('_', '').replace('-', '').isalnum():
+        return jsonify({'error': 'Use letters, numbers, hyphens, or underscores for the name'}), 400
+    if state not in ANIMATION_STATES:
+        return jsonify({'error': 'Unknown animation state'}), 400
+    if not isinstance(frames, list) or not 1 <= len(frames) <= 120:
+        return jsonify({'error': 'Animations must contain 1 to 120 frames'}), 400
+    if not isinstance(fps, (int, float)) or not 1 <= fps <= 30:
+        return jsonify({'error': 'FPS must be between 1 and 30'}), 400
+
+    for frame in frames:
+        if not isinstance(frame, list) or len(frame) != 128 * 64:
+            return jsonify({'error': 'Every frame must contain exactly 8192 pixels'}), 400
+        if any(pixel not in (0, 1, 2) for pixel in frame):
+            return jsonify({'error': 'Pixels must be 0 (black), 1 (white), or 2 (red preview)'}), 400
+
+    animation = {
+        'name': name,
+        'state': state,
+        'width': 128,
+        'height': 64,
+        'fps': fps,
+        'loop': True,
+        'frames': frames,
+    }
+    path = os.path.join(animation_dir, f'{name}.json')
+    with open(path, 'w', encoding='utf-8') as animation_file:
+        json.dump(animation, animation_file, separators=(',', ':'))
+    return jsonify({'success': True, 'name': name})
 
 
 @app.route('/api/events')

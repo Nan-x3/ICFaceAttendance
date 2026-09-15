@@ -13,6 +13,7 @@ env/
 
 # Data (user-specific, don't push)
 data/*.db
+data/animations/*.json
 known_faces/
 encodings/
 

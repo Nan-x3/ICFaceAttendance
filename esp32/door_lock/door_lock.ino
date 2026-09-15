@@ -63,18 +63,12 @@ String enteredPin;
 void renderLocked(uint8_t frame) {
     display.clearDisplay();
     display.setTextColor(SSD1306_WHITE);
-    uint8_t pulse = frame % 8;
-    display.drawRoundRect(47 - pulse / 2, 28 - pulse / 2,
-                          34 + pulse, 27 + pulse, 5, SSD1306_WHITE);
-    display.drawRoundRect(54, 12 - pulse / 2, 20, 27 + pulse, 9, SSD1306_WHITE);
+    display.drawRoundRect(47, 28, 34, 27, 5, SSD1306_WHITE);
+    display.drawRoundRect(54, 12, 20, 27, 9, SSD1306_WHITE);
     display.fillRect(59, 25, 10, 14, SSD1306_BLACK);
     display.fillCircle(64, 39, 3, SSD1306_WHITE);
     display.drawLine(64, 39, 64, 47, SSD1306_WHITE);
-    for (uint8_t index = 0; index < 3; index++) {
-        if ((frame + index) % 3 == 0) {
-            display.fillCircle(38 + index * 52, 20, 1, SSD1306_WHITE);
-        }
-    }
+    display.fillCircle(45 + (frame % 5) * 10, 20, 1, SSD1306_WHITE);
     display.setTextSize(1);
     display.setCursor(43, 57);
     display.println("LOCKED");
@@ -440,7 +434,7 @@ void loop() {
         lastButtonChange = millis();
     }
 
-    if (!enteredPin.length() && millis() - lastIdleFrame >= 180) {
+    if (!enteredPin.length() && millis() - lastIdleFrame >= 700) {
         lastIdleFrame = millis();
         idleFrame = (idleFrame + 1) % 8;
         renderLocked(idleFrame);

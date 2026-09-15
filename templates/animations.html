@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block title %}OLED Studio{% endblock %}
+
+{% block content %}
+<header class="page-header animation-header">
+    <div>
+        <p class="eyebrow">128 × 64 monochrome canvas</p>
+        <h1>OLED Studio</h1>
+        <p class="subtitle">Draw a frame, build a loop, assign it to a device state.</p>
+    </div>
+    <div class="animation-actions">
+        <button class="btn btn-outline" id="newAnimationBtn">New</button>
+        <button class="btn btn-primary" id="saveAnimationBtn">Save animation</button>
+    </div>
+</header>
+
+<section class="oled-studio">
+    <aside class="studio-sidebar">
+        <div class="studio-panel">
+            <label class="field-label" for="animationName">Animation name</label>
+            <input id="animationName" class="studio-input" value="quiet_locked" maxlength="40">
+            <label class="field-label" for="animationState">Device state</label>
+            <select id="animationState" class="studio-input">
+                {% for state in animation_states %}
+                <option value="{{ state }}">{{ state.replace('_', ' ') | title }}</option>
+                {% endfor %}
+            </select>
+            <div class="studio-split-fields">
+                <div>
+                    <label class="field-label" for="fpsInput">FPS</label>
+                    <input id="fpsInput" class="studio-input" type="number" min="1" max="30" value="8">
+                </div>
+                <div>
+                    <label class="field-label">Loop</label>
+                    <div class="loop-indicator">∞ Always</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="studio-panel">
+            <div class="panel-heading"><span>Saved animations</span><span id="savedCount">0</span></div>
+            <div id="savedAnimations" class="saved-animations"></div>
+        </div>
+
+        <div class="studio-panel studio-note">
+            <strong>Color note</strong>
+            <p>Red is a preview color for input and emphasis. The physical OLED is monochrome, so red exports as white.</p>
+        </div>
+    </aside>
+
+    <section class="studio-workspace">
+        <div class="canvas-toolbar">
+            <div class="tool-group">
+                <button class="icon-tool active" data-tool="pencil" title="Draw pixels">✎</button>
+                <button class="icon-tool" data-tool="eraser" title="Erase pixels">⌫</button>
+                <button class="icon-tool" data-tool="fill" title="Fill canvas">◩</button>
+            </div>
+            <div class="swatches" aria-label="Pixel color">
+                <button class="swatch active" data-color="1" title="OLED white"></button>
+                <button class="swatch red" data-color="2" title="Preview red"></button>
+                <button class="swatch black" data-color="0" title="Black background"></button>
+            </div>
+            <label class="check-control"><input id="onionSkin" type="checkbox"> Onion skin</label>
+            <span class="canvas-hint">Drag to draw · right-click erases</span>
+        </div>
+        <div class="canvas-stage">
+            <canvas id="oledCanvas" width="128" height="64"></canvas>
+        </div>
+        <div class="playback-bar">
+            <button class="btn btn-sm btn-outline" id="playBtn">▶ Play</button>
+            <button class="btn btn-sm btn-outline" id="prevFrameBtn">←</button>
+            <span id="frameLabel">Frame 1 / 1</span>
+            <button class="btn btn-sm btn-outline" id="nextFrameBtn">→</button>
+            <button class="btn btn-sm btn-outline" id="duplicateFrameBtn">Duplicate frame</button>
+            <button class="btn btn-sm btn-danger" id="deleteFrameBtn">Delete frame</button>
+        </div>
+        <div class="timeline" id="timeline"></div>
+    </section>
+</section>
+
+<div id="studioToast" class="studio-toast" role="status"></div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/animations.js') }}"></script>
+{% endblock %}
