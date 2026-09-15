@@ -9,6 +9,7 @@
 #include <HTTPUpdate.h>
 #include <SPIFFS.h>
 #include <ArduinoJson.h>
+#include "firmware_config.h"
 #include "secrets.h"
 
 namespace Pins {
@@ -27,7 +28,6 @@ constexpr uint8_t Address = 0x3C;
 
 constexpr unsigned long UnlockDurationMs = 10000;
 constexpr unsigned long ButtonDebounceMs = 50;
-constexpr unsigned long FirmwareCheckIntervalMs = 10UL * 60UL * 1000UL;
 #ifndef FIRMWARE_VERSION
 #define FIRMWARE_VERSION "0.2.0"
 #endif

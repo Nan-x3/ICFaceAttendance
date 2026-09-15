@@ -33,6 +33,18 @@ WiFi, ArduinoOTA, SPIFFS, Wire, and SPI are provided by the ESP32 Arduino core.
 
 `secrets.h` must stay local and must never be committed.
 
+## Firmware Update Timing
+
+Edit `firmware_config.h` to control how often the ESP32 checks the Pi for a
+new firmware build:
+
+```cpp
+constexpr unsigned long FirmwareCheckIntervalMinutes = 10;
+```
+
+Use a longer interval for deployed devices to reduce network and power usage.
+The ESP32 also checks immediately after boot when Wi-Fi connects.
+
 ## Commands From The Raspberry Pi
 
 The Pi sends newline-terminated commands:
