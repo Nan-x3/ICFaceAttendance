@@ -29,7 +29,7 @@ constexpr uint8_t Address = 0x3C;
 constexpr unsigned long UnlockDurationMs = 10000;
 constexpr unsigned long ExitDebounceMs = 50;
 #ifndef FIRMWARE_VERSION
-#define FIRMWARE_VERSION "0.2.0"
+#define FIRMWARE_VERSION "0.2.1"
 #endif
 const char* FirmwareVersion = FIRMWARE_VERSION;
 const char* GuestFile = "/guests.json";
