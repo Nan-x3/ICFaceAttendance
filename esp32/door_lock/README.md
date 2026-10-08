@@ -4,7 +4,7 @@ This folder contains the cleaned firmware source for the ESP32 door controller.
 It preserves the current wiring and behavior:
 
 - Relay: GPIO 18, active LOW, unlocked for 10 seconds.
-- Exit/contact button: GPIO 19 to GND, using the internal pull-up.
+- PIR motion sensor output: GPIO 19, active HIGH, using the internal pull-down.
 - Keypad rows: GPIO 13, 12, 14, 27.
 - Keypad columns: GPIO 26, 25, 33, 32.
 - OLED: I2C address `0x3C`, 128x64.
@@ -55,13 +55,19 @@ The Pi sends newline-terminated commands:
 - `REMOVE:<pin>`: removes a keypad credential.
 - `LIST`: prints all keypad credentials.
 
-## Exit Contact Wiring
+## PIR Motion Sensor Wiring
 
-For the SIBASS ZB2-BE101 dry contact, connect one contact terminal to ESP32
-`GND` and the other contact terminal to GPIO `19`. The firmware configures GPIO
-19 as `INPUT_PULLUP`: it reads HIGH while open and LOW when the contact closes.
-Do not connect an external voltage to this contact input. One press unlocks the
-relay for 10 seconds; the contact must release before another press is accepted.
+Connect the PIR module's `OUT` to GPIO `19` and connect its `GND` to ESP32 `GND`.
+Power the module according to its specifications. The firmware configures GPIO
+19 as `INPUT_PULLDOWN` and unlocks for 10 seconds when the output remains HIGH
+for 50 ms. The output must return LOW before another trigger is accepted.
+
+ESP32 GPIOs are not 5 V tolerant. Verify that the PIR `OUT` signal is no more
+than 3.3 V; use a suitable level shifter if the module outputs 5 V. PIR sensors
+detect movement, not a person's continued presence, and firmware cannot set
+their detection distance to exactly 30 cm. Adjust the sensor's range control if
+it has one and test its actual detection zone; use a short-range proximity
+sensor instead if a reliable 30 cm threshold is required.
 
 ## OTA
 

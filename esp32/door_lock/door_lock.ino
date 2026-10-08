@@ -14,7 +14,7 @@
 
 namespace Pins {
 constexpr uint8_t Relay = 18;
-constexpr uint8_t ExitButton = 19;
+constexpr uint8_t ExitSensor = 19;
 byte KeypadRows[] = {13, 12, 14, 27};
 byte KeypadColumns[] = {26, 25, 33, 32};
 }
@@ -27,18 +27,18 @@ constexpr uint8_t Address = 0x3C;
 }
 
 constexpr unsigned long UnlockDurationMs = 10000;
-constexpr unsigned long ButtonDebounceMs = 50;
+constexpr unsigned long ExitDebounceMs = 50;
 #ifndef FIRMWARE_VERSION
 #define FIRMWARE_VERSION "0.2.0"
 #endif
 const char* FirmwareVersion = FIRMWARE_VERSION;
 const char* GuestFile = "/guests.json";
 unsigned long lastFirmwareCheck = 0;
-unsigned long lastButtonChange = 0;
+unsigned long lastExitChange = 0;
 unsigned long lastIdleFrame = 0;
 uint8_t idleFrame = 0;
-bool lastButtonState = HIGH;
-bool buttonArmed = true;
+bool lastExitState = LOW;
+bool exitArmed = true;
 
 Adafruit_SSD1306 display(
     DisplayConfig::Width,
@@ -362,7 +362,7 @@ void checkForGitHubFirmwareUpdate() {
 void setup() {
     pinMode(Pins::Relay, OUTPUT);
     digitalWrite(Pins::Relay, HIGH);
-    pinMode(Pins::ExitButton, INPUT_PULLUP);
+    pinMode(Pins::ExitSensor, INPUT_PULLDOWN);
     Serial.begin(9600);
 
     if (!display.begin(SSD1306_SWITCHCAPVCC, DisplayConfig::Address)) {
@@ -417,21 +417,21 @@ void loop() {
     }
 
     char key = keypad.getKey();
-    bool buttonState = digitalRead(Pins::ExitButton);
-    if (buttonState != lastButtonState) {
-        lastButtonChange = millis();
-        lastButtonState = buttonState;
+    bool exitState = digitalRead(Pins::ExitSensor);
+    if (exitState != lastExitState) {
+        lastExitChange = millis();
+        lastExitState = exitState;
     }
 
-    if (buttonState == HIGH && millis() - lastButtonChange >= ButtonDebounceMs) {
-        buttonArmed = true;
+    if (exitState == LOW && millis() - lastExitChange >= ExitDebounceMs) {
+        exitArmed = true;
     }
 
-    if (buttonState == LOW && buttonArmed &&
-        millis() - lastButtonChange >= ButtonDebounceMs) {
-        unlockDoor("Exit Button", "GPIO 19");
-        buttonArmed = false;
-        lastButtonChange = millis();
+    if (exitState == HIGH && exitArmed &&
+        millis() - lastExitChange >= ExitDebounceMs) {
+        exitArmed = false;
+        unlockDoor("Exit Sensor", "PIR GPIO 19");
+        lastExitChange = millis();
     }
 
     if (!enteredPin.length() && millis() - lastIdleFrame >= 700) {
