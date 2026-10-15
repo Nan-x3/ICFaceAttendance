@@ -14,7 +14,9 @@
 
 namespace Pins {
 constexpr uint8_t Relay = 18;
-constexpr uint8_t ExitSensor = 19;
+// HC-SR04: trigger and echo pins. Echo is using the previous PIR pin (19) by default.
+constexpr uint8_t ExitTrig = 4;
+constexpr uint8_t ExitEcho = 5;
 byte KeypadRows[] = {13, 12, 14, 27};
 byte KeypadColumns[] = {26, 25, 33, 32};
 }
@@ -37,6 +39,7 @@ unsigned long lastFirmwareCheck = 0;
 unsigned long lastExitChange = 0;
 unsigned long lastIdleFrame = 0;
 uint8_t idleFrame = 0;
+// lastExitState used as boolean: false = no object, true = object detected
 bool lastExitState = LOW;
 bool exitArmed = true;
 
@@ -362,7 +365,10 @@ void checkForGitHubFirmwareUpdate() {
 void setup() {
     pinMode(Pins::Relay, OUTPUT);
     digitalWrite(Pins::Relay, HIGH);
-    pinMode(Pins::ExitSensor, INPUT_PULLDOWN);
+    // Configure HC-SR04 pins
+    pinMode(Pins::ExitTrig, OUTPUT);
+    pinMode(Pins::ExitEcho, INPUT);
+    digitalWrite(Pins::ExitTrig, LOW);
     Serial.begin(9600);
 
     if (!display.begin(SSD1306_SWITCHCAPVCC, DisplayConfig::Address)) {
@@ -403,6 +409,26 @@ void setup() {
     Serial.println("IC DoorLock Ready");
 }
 
+// measure distance in cm using HC-SR04 (returns large value on timeout)
+float measureDistanceCm() {
+    // Send trigger pulse
+    digitalWrite(Pins::ExitTrig, LOW);
+    delayMicroseconds(2);
+    digitalWrite(Pins::ExitTrig, HIGH);
+    delayMicroseconds(10);
+    digitalWrite(Pins::ExitTrig, LOW);
+
+    // wait for echo (timeout 30000 us ~ 5m)
+    unsigned long duration = pulseIn(Pins::ExitEcho, HIGH, 30000UL);
+    if (duration == 0) {
+        // timeout => no object detected in range
+        return 9999.0;
+    }
+    // duration is round-trip time in microseconds
+    float distance = duration / 58.0; // approximate conversion to cm
+    return distance;
+}
+
 void loop() {
     if (WiFi.status() == WL_CONNECTED) {
         ArduinoOTA.handle();
@@ -417,20 +443,24 @@ void loop() {
     }
 
     char key = keypad.getKey();
-    bool exitState = digitalRead(Pins::ExitSensor);
+
+    // Use HC-SR04 to detect object closer than 30 cm
+    float distance = measureDistanceCm();
+    bool exitState = (distance > 0 && distance < 30.0); // true when object detected within 30cm
+
     if (exitState != lastExitState) {
         lastExitChange = millis();
         lastExitState = exitState;
     }
 
-    if (exitState == LOW && millis() - lastExitChange >= ExitDebounceMs) {
+    if (exitState == false && millis() - lastExitChange >= ExitDebounceMs) {
         exitArmed = true;
     }
 
-    if (exitState == HIGH && exitArmed &&
+    if (exitState == true && exitArmed &&
         millis() - lastExitChange >= ExitDebounceMs) {
         exitArmed = false;
-        unlockDoor("Exit Sensor", "PIR GPIO 19");
+        unlockDoor("Exit Sensor", "HC-SR04");
         lastExitChange = millis();
     }
 
